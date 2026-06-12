@@ -1,0 +1,16 @@
+{
+  "name": "field-service-operations",
+  "version": "1.0.0",
+  "description": "Single-file field service operations dashboard. Multi-customer, inline editing, CSV/Excel import, Excel/CSV/PDF export.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "license": "MIT"
+}

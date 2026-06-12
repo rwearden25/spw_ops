@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Field Service Operations</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root{
+    --bg:#f4f6f8;
+    --card:#ffffff;
+    --ink:#1c2430;
+    --ink-soft:#5d6b7a;
+    --line:#e2e7ec;
+    --accent:#2f5d8f;
+    --accent-deep:#274e79;
+    --accent-soft:#e8eff6;
+    --teal:#2a7d6f;
+    --teal-soft:#e6f2f0;
+    --amber:#b07a1f;
+    --amber-soft:#faf1e0;
+    --red:#a8423a;
+    --red-soft:#f7e9e7;
+    --gray-soft:#edf0f3;
+    --radius:12px;
+    --shadow:0 1px 2px rgba(28,36,48,.04),0 8px 24px rgba(28,36,48,.05);
+    --mono:'SF Mono',ui-monospace,'Cascadia Code',Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif;
+    background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45;
+  }
+  button{font-family:inherit;}
+
+  /* ================= LOGIN ================= */
+  #loginView{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .login-card{
+    background:var(--card);border:1px solid var(--line);border-radius:16px;
+    width:100%;max-width:380px;padding:36px 32px;box-shadow:var(--shadow);
+  }
+  .login-card .logo{width:46px;height:46px;border-radius:12px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:18px;}
+  .login-card h1{font-size:19px;letter-spacing:-.3px;margin-bottom:4px;}
+  .login-card .sub{color:var(--ink-soft);font-size:13px;margin-bottom:22px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:11.5px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;}
+  .field input,.field select{
+    width:100%;border:1px solid var(--line);border-radius:9px;padding:10px 12px;
+    font-size:14px;font-family:inherit;background:#fff;color:var(--ink);
+  }
+  .field input:focus,.field select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent);}
+  .btn{
+    border:none;border-radius:9px;padding:10px 18px;font-size:13.5px;font-weight:600;
+    cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:background .12s,border-color .12s;
+  }
+  .btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px;}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-primary:hover{background:var(--accent-deep);}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:var(--ink);}
+  .btn-ghost:hover{border-color:var(--ink-soft);}
+  .btn-danger{background:var(--red-soft);color:var(--red);}
+  .btn-danger:hover{background:#f0ddda;}
+  .btn-block{width:100%;justify-content:center;margin-top:6px;}
+  .login-err{display:none;background:var(--red-soft);color:var(--red);border-radius:9px;padding:9px 12px;font-size:12.5px;margin-bottom:14px;font-weight:500;}
+  .login-err.show{display:block;}
+
+  /* ================= APP SHELL ================= */
+  #appView{display:none;padding:0 20px 60px;}
+  .wrap{max-width:1220px;margin:0 auto;}
+
+  .topbar{
+    display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;
+    padding:16px 0 14px;margin-bottom:8px;border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex;align-items:center;gap:12px;min-width:0;}
+  .brand .mark{width:38px;height:38px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .brand h1{font-size:19px;font-weight:700;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .brand p{color:var(--ink-soft);font-size:12.5px;margin-top:1px;}
+  .topbar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+
+  .customer-ctl{display:flex;align-items:center;gap:6px;}
+  .customer-sel{
+    border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);
+    padding:9px 12px;font-size:13.5px;font-weight:600;font-family:inherit;max-width:260px;cursor:pointer;
+  }
+  .customer-sel:focus{outline:2px solid var(--accent);outline-offset:-1px;}
+  .icon-btn{
+    width:36px;height:36px;border-radius:9px;border:1px solid var(--line);background:#fff;
+    display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink-soft);
+  }
+  .icon-btn:hover{border-color:var(--ink-soft);color:var(--ink);}
+  .icon-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+
+  .menu-wrap{position:relative;}
+  .menu{
+    display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:40;
+    background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow);
+    min-width:200px;padding:6px;
+  }
+  .menu.open{display:block;}
+  .menu button{
+    width:100%;text-align:left;background:none;border:none;border-radius:7px;
+    padding:9px 11px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:9px;color:var(--ink);
+  }
+  .menu button:hover{background:var(--gray-soft);}
+  .menu .menu-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-soft);font-weight:700;padding:7px 11px 3px;}
+
+  .subbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 18px;}
+  .cycle-tag{background:var(--accent);color:#fff;border-radius:999px;padding:7px 16px;font-size:12.5px;font-weight:600;letter-spacing:.3px;}
+  .data-note{color:var(--ink-soft);font-size:12px;}
+
+  /* ================= KPI / PROGRESS ================= */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);}
+  .kpi .label{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-soft);font-weight:600;}
+  .kpi .value{font-size:26px;font-weight:700;margin-top:4px;letter-spacing:-.5px;}
+  .kpi .sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .kpi.accent .value{color:var(--accent);}
+
+  .progress-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:18px;box-shadow:var(--shadow);}
+  .progress-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+  .progress-head .t{font-weight:600;font-size:13.5px;}
+  .progress-head .pct{font-family:var(--mono);font-size:13px;color:var(--accent);font-weight:600;}
+  .bar{height:10px;background:var(--gray-soft);border-radius:6px;overflow:hidden;display:flex;}
+  .bar div{transition:width .35s ease;}
+  .seg-invoiced{background:var(--accent);}
+  .seg-completed{background:var(--teal);}
+  .seg-today{background:var(--amber);}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:12px;color:var(--ink-soft);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
+
+  /* ================= SECTIONS ================= */
+  details.section{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:14px;overflow:visible;box-shadow:var(--shadow);}
+  details.section > summary{
+    list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+    padding:15px 18px;user-select:none;border-radius:var(--radius);
+  }
+  details.section > summary::-webkit-details-marker{display:none;}
+  details.section > summary:hover{background:#fafbfc;}
+  details.section > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+  .sec-title{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:700;letter-spacing:-.2px;}
+  .sec-count{background:var(--gray-soft);color:var(--ink-soft);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600;}
+  .chev{transition:transform .18s ease;color:var(--ink-soft);flex-shrink:0;}
+  details[open] > summary .chev{transform:rotate(180deg);}
+  .sec-body{border-top:1px solid var(--line);padding:16px 18px;}
+
+  /* ================= FILTERS / TABLE ================= */
+  .filters{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;align-items:center;}
+  .filters select,.filters input{
+    border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);
+    padding:8px 12px;font-size:13px;font-family:inherit;
+  }
+  .filters input{flex:1;min-width:180px;}
+  .filters select:focus,.filters input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent);}
+  .filters .spacer{flex:1;}
+
+  .tbl-scroll{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-soft);font-weight:600;padding:8px 10px;border-bottom:2px solid var(--line);white-space:nowrap;}
+  td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:#fafbfc;}
+  .store{font-weight:600;}
+  .addr{color:var(--ink-soft);font-size:12px;white-space:normal;min-width:160px;}
+  .num{font-family:var(--mono);font-size:12px;color:var(--ink-soft);}
+  .money{font-family:var(--mono);font-weight:600;text-align:right;}
+  .travel{color:var(--amber);font-size:11.5px;font-family:var(--mono);}
+  td.eta{font-family:var(--mono);font-size:12.5px;}
+  .flag{display:inline-block;margin-left:6px;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:700;background:var(--red-soft);color:var(--red);letter-spacing:.3px;}
+  .empty-row td{text-align:center;color:var(--ink-soft);padding:28px;white-space:normal;}
+  .row-edit{font-size:12px;font-weight:600;color:var(--accent);background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px;}
+  .row-edit:hover{background:var(--accent-soft);}
+
+  /* inline status dropdown — styled as a pill */
+  .status-sel{
+    appearance:none;-webkit-appearance:none;border:none;border-radius:999px;
+    padding:4px 24px 4px 11px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;
+    background-repeat:no-repeat;background-position:right 8px center;background-size:9px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%235d6b7a' stroke-width='1.6' stroke-linecap='round'/></svg>");
+  }
+  .status-sel:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+  .s-invoiced{background-color:var(--accent-soft);color:var(--accent);}
+  .s-completed{background-color:var(--teal-soft);color:var(--teal);}
+  .s-today{background-color:var(--amber-soft);color:var(--amber);}
+  .s-upcoming{background-color:var(--gray-soft);color:var(--ink-soft);}
+
+  /* ================= NEXT UP / REVENUE / EXCLUDED ================= */
+  .week-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;}
+  .week-card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fcfdfe;}
+  .week-card .d{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:700;margin-bottom:4px;}
+  .week-card .s{font-weight:600;font-size:13px;}
+  .week-card .c{color:var(--ink-soft);font-size:12px;margin-top:2px;}
+  .week-card .fee{font-family:var(--mono);font-size:12px;margin-top:6px;}
+
+  .rev-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px;}
+  .rev-card{border:1px solid var(--line);border-radius:10px;padding:13px 15px;}
+  .rev-card .l{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-soft);font-weight:600;}
+  .rev-card .v{font-family:var(--mono);font-size:21px;font-weight:700;margin-top:4px;}
+  .rev-note{font-size:12.5px;color:var(--ink-soft);}
+
+  .city-group{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden;}
+  .city-group summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:10px 14px;font-weight:600;font-size:13.5px;background:#fcfdfe;}
+  .city-group summary::-webkit-details-marker{display:none;}
+  .city-group summary:hover{background:#f5f7f9;}
+  .city-group[open] summary{border-bottom:1px solid var(--line);}
+  .city-list{padding:6px 14px 10px;}
+  .city-list .xrow{padding:6px 0;border-bottom:1px dashed var(--line);font-size:12.5px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  .city-list .xrow:last-child{border-bottom:none;}
+  .city-list .sn{font-weight:600;min-width:100px;}
+  .city-list .sa{color:var(--ink-soft);flex:1;}
+  .xremove{background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:15px;line-height:1;padding:2px 6px;border-radius:6px;}
+  .xremove:hover{background:var(--red-soft);color:var(--red);}
+  .excl-add{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+  .excl-add input{border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-size:13px;font-family:inherit;}
+  .excl-add input:focus{outline:2px solid var(--accent);outline-offset:-1px;}
+
+  /* ================= MODALS ================= */
+  .overlay{
+    display:none;position:fixed;inset:0;background:rgba(28,36,48,.42);backdrop-filter:blur(2px);
+    z-index:100;align-items:flex-start;justify-content:center;padding:6vh 16px;overflow-y:auto;
+  }
+  .overlay.open{display:flex;}
+  .modal{
+    background:#fff;border-radius:16px;width:100%;max-width:560px;
+    box-shadow:0 20px 60px rgba(28,36,48,.25);padding:26px 26px 22px;
+  }
+  .modal h2{font-size:17px;letter-spacing:-.2px;margin-bottom:4px;}
+  .modal .m-sub{color:var(--ink-soft);font-size:13px;margin-bottom:18px;}
+  .m-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .m-grid .full{grid-column:1 / -1;}
+  .m-actions{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:20px;}
+  .m-actions .right{display:flex;gap:10px;margin-left:auto;}
+  .radio-row{display:flex;gap:18px;font-size:13px;margin:6px 0 2px;}
+  .radio-row label{display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;}
+  .drop-hint{border:1.5px dashed var(--line);border-radius:10px;padding:16px;text-align:center;color:var(--ink-soft);font-size:13px;margin-bottom:12px;}
+  .file-name{font-weight:600;color:var(--ink);}
+  .tmpl-link{color:var(--accent);font-weight:600;cursor:pointer;background:none;border:none;font-size:12.5px;padding:0;text-decoration:underline;}
+
+  /* ================= TOAST ================= */
+  #toasts{position:fixed;bottom:22px;right:22px;z-index:200;display:flex;flex-direction:column;gap:8px;}
+  .toast{
+    background:var(--ink);color:#fff;border-radius:10px;padding:11px 16px;font-size:13px;
+    box-shadow:var(--shadow);animation:slidein .2s ease;max-width:320px;
+  }
+  @keyframes slidein{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+
+  footer{margin-top:26px;color:var(--ink-soft);font-size:12px;text-align:center;}
+
+  @media (max-width:680px){
+    #appView{padding:0 12px 50px;}
+    .kpi .value{font-size:21px;}
+    .m-grid{grid-template-columns:1fr;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .chev,.bar div{transition:none;}
+    .toast{animation:none;}
+  }
+  @media print{
+    .topbar-actions,.filters,.row-edit,.excl-add,.xremove,#toasts,.subbar .data-note{display:none !important;}
+    body{background:#fff;}
+    details.section,.kpi,.progress-card{box-shadow:none;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="loginView">
+  <div class="login-card">
+    <div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 13l5 5L20 7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <h1>Field Service Operations</h1>
+    <p class="sub">Sign in to manage your service cycles.</p>
+    <div class="login-err" id="loginErr">Incorrect username or password. Try again.</div>
+    <div class="field"><label for="loginUser">Username</label><input id="loginUser" type="text" autocomplete="username" autofocus></div>
+    <div class="field"><label for="loginPass">Password</label><input id="loginPass" type="password" autocomplete="current-password"></div>
+    <button class="btn btn-primary btn-block" id="loginBtn">Sign in</button>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="appView">
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 13l5 5L20 7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div style="min-width:0">
+        <h1 id="appTitle"></h1>
+        <p id="appSub"></p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="customer-ctl">
+        <select class="customer-sel" id="customerSel" aria-label="Switch customer"></select>
+        <button class="icon-btn" id="editCustomerBtn" title="Edit customer details" aria-label="Edit customer details">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <button class="btn btn-ghost" id="importBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Import
+      </button>
+      <div class="menu-wrap">
+        <button class="btn btn-primary" id="exportBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 15V3m0 0L8 7m4-4l4 4M4 21h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Export
+        </button>
+        <div class="menu" id="exportMenu" role="menu">
+          <div class="menu-label">Download as</div>
+          <button id="exXlsx">Excel workbook (.xlsx)</button>
+          <button id="exCsv">CSV — schedule (.csv)</button>
+          <button id="exPdf">PDF report (.pdf)</button>
+          <button id="exPrint">Print view</button>
+        </div>
+      </div>
+      <button class="icon-btn" id="logoutBtn" title="Sign out" aria-label="Sign out">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="subbar">
+    <div class="cycle-tag" id="deadlineTag"></div>
+    <div class="data-note">Changes live in this session — export to Excel to save a snapshot.</div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="progress-card">
+    <div class="progress-head">
+      <span class="t">Cycle completion</span>
+      <span class="pct" id="pct"></span>
+    </div>
+    <div class="bar" id="bar"></div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--accent)"></i>Invoiced</span>
+      <span><i class="dot" style="background:var(--teal)"></i>Completed — needs invoice</span>
+      <span><i class="dot" style="background:var(--amber)"></i>In progress today</span>
+      <span><i class="dot" style="background:var(--gray-soft);border:1px solid var(--line)"></i>Upcoming</span>
+    </div>
+  </div>
+
+  <details class="section" open>
+    <summary>
+      <span class="sec-title">Next Up <span class="sec-count" id="weekCount"></span></span>
+      <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </summary>
+    <div class="sec-body"><div class="week-grid" id="weekGrid"></div></div>
+  </details>
+
+  <details class="section" open>
+    <summary>
+      <span class="sec-title">Service Schedule <span class="sec-count" id="schedCount"></span></span>
+      <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </summary>
+    <div class="sec-body">
+      <div class="filters">
+        <select id="fStatus" aria-label="Filter by status">
+          <option value="">All statuses</option>
+          <option value="invoiced">Invoiced</option>
+          <option value="completed">Completed — needs invoice</option>
+          <option value="today">In progress today</option>
+          <option value="upcoming">Upcoming</option>
+        </select>
+        <select id="fCity" aria-label="Filter by city"><option value="">All cities</option></select>
+        <select id="fFee" aria-label="Filter by travel fee">
+          <option value="">Any pricing</option>
+          <option value="travel">With travel fee</option>
+          <option value="base">Base rate only</option>
+        </select>
+        <input id="fSearch" type="search" placeholder="Search site #, city, address, WO…" aria-label="Search sites">
+        <span class="spacer"></span>
+        <button class="btn btn-ghost" id="addSiteBtn">＋ Add site</button>
+      </div>
+      <div class="tbl-scroll">
+        <table>
+          <thead>
+            <tr><th>Status</th><th>ETA</th><th>Site</th><th>Address</th><th>WO #</th><th>Ticket #</th><th>Closes</th><th style="text-align:right">Rate</th><th></th></tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+
+  <details class="section">
+    <summary>
+      <span class="sec-title">Revenue Summary</span>
+      <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </summary>
+    <div class="sec-body">
+      <div class="rev-grid" id="revGrid"></div>
+      <p class="rev-note" id="revNote"></p>
+    </div>
+  </details>
+
+  <details class="section">
+    <summary>
+      <span class="sec-title">Not Serviced This Cycle <span class="sec-count" id="exclCount"></span></span>
+      <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </summary>
+    <div class="sec-body">
+      <p class="rev-note" style="margin-bottom:12px;">Sites declined this cycle based on time-to-complete, distance, and crew availability. Reassigned for one-off coverage; full roster resumes next cycle.</p>
+      <div id="exclGroups"></div>
+      <div class="excl-add">
+        <input id="xCity" placeholder="City" aria-label="City">
+        <input id="xSite" placeholder="Site #" style="width:110px" aria-label="Site number">
+        <input id="xAddr" placeholder="Address" style="flex:1;min-width:160px" aria-label="Address">
+        <button class="btn btn-ghost" id="xAddBtn">Add</button>
+      </div>
+    </div>
+  </details>
+
+  <footer>Field Service Operations — single-file dashboard. Imports CSV / Excel · Exports Excel, CSV, PDF.</footer>
+</div>
+</div>
+
+<!-- ================= CUSTOMER MODAL ================= -->
+<div class="overlay" id="customerOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="custModalTitle">
+    <h2 id="custModalTitle">Add customer</h2>
+    <p class="m-sub">A customer is a program or account with its own schedule, pricing, and cycle deadline.</p>
+    <div class="m-grid">
+      <div class="field full"><label for="cName">Customer / program name</label><input id="cName" placeholder="e.g. Acme Retail Group"></div>
+      <div class="field full"><label for="cSub">Description</label><input id="cSub" placeholder="e.g. Q2 2026 exterior maintenance program"></div>
+      <div class="field"><label for="cDeadline">Cycle deadline</label><input id="cDeadline" type="date"></div>
+      <div class="field"><label for="cBase">Default base rate ($)</label><input id="cBase" type="number" min="0" step="5" value="350"></div>
+    </div>
+    <div class="m-actions">
+      <button class="btn btn-danger" id="cDeleteBtn" style="display:none">Delete customer</button>
+      <div class="right">
+        <button class="btn btn-ghost" data-close="customerOverlay">Cancel</button>
+        <button class="btn btn-primary" id="cSaveBtn">Save customer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= SITE MODAL ================= -->
+<div class="overlay" id="siteOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="siteModalTitle">
+    <h2 id="siteModalTitle">Add site</h2>
+    <p class="m-sub">Every field can be changed later — status straight from the table, everything else from here.</p>
+    <div class="m-grid">
+      <div class="field"><label for="sStatus">Status</label>
+        <select id="sStatus">
+          <option value="upcoming">Upcoming</option>
+          <option value="today">In progress today</option>
+          <option value="completed">Completed — needs invoice</option>
+          <option value="invoiced">Invoiced</option>
+        </select>
+      </div>
+      <div class="field"><label for="sEta">Service ETA</label><input id="sEta" type="date"></div>
+      <div class="field"><label for="sSite">Site #</label><input id="sSite" placeholder="1042"></div>
+      <div class="field"><label for="sCloses">Closes</label><input id="sCloses" placeholder="10pm"></div>
+      <div class="field full"><label for="sAddr">Street address</label><input id="sAddr" placeholder="2918 US Hwy 75"></div>
+      <div class="field"><label for="sCity">City</label><input id="sCity" placeholder="Sherwood"></div>
+      <div class="field"><label for="sZip">Zip</label><input id="sZip" placeholder="75090"></div>
+      <div class="field"><label for="sWo">WO #</label><input id="sWo"></div>
+      <div class="field"><label for="sTk">Ticket #</label><input id="sTk"></div>
+      <div class="field"><label for="sBase">Base rate ($)</label><input id="sBase" type="number" min="0" step="5"></div>
+      <div class="field"><label for="sTravel">Travel / revisit fee ($)</label><input id="sTravel" type="number" min="0" step="1" value="0"></div>
+      <div class="field full"><label for="sNote">Flag / note (shows as a badge)</label><input id="sNote" placeholder="NO WATER, REVISIT +$75…"></div>
+    </div>
+    <div class="m-actions">
+      <button class="btn btn-danger" id="sDeleteBtn" style="display:none">Delete site</button>
+      <div class="right">
+        <button class="btn btn-ghost" data-close="siteOverlay">Cancel</button>
+        <button class="btn btn-primary" id="sSaveBtn">Save site</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= IMPORT MODAL ================= -->
+<div class="overlay" id="importOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+    <h2 id="importModalTitle">Import schedule</h2>
+    <p class="m-sub">Bring in a CSV or Excel file. Columns are matched by header name — Status, ETA, Site, Address, City, Zip, WO, Ticket, Closes, Rate, Travel, Note. Extra columns are ignored.</p>
+    <div class="drop-hint" id="dropHint">
+      <span id="fileLabel">No file selected.</span><br><br>
+      <button class="btn btn-ghost" id="pickFileBtn">Choose CSV or Excel file</button>
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display:none">
+    </div>
+    <div class="radio-row" role="radiogroup" aria-label="Import mode">
+      <label><input type="radio" name="impMode" value="append" checked> Add to current schedule</label>
+      <label><input type="radio" name="impMode" value="replace"> Replace current schedule</label>
+    </div>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px;">
+      Starting from scratch? <button class="tmpl-link" id="tmplBtn">Download a blank template</button>
+    </p>
+    <div class="m-actions">
+      <div class="right">
+        <button class="btn btn-ghost" data-close="importOverlay">Cancel</button>
+        <button class="btn btn-primary" id="impConfirmBtn" disabled>Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+/* =====================================================
+   CONFIG
+   ===================================================== */
+const CONFIG = { username:'admin', password:'adminpasswd', today:'2026-06-11' };
+
+/* =====================================================
+   DATA MODEL
+   customers: [{id, name, subtitle, deadline(ISO), defaultBase, schedule:[site], excluded:[{city,site,addr}]}]
+   site: {id, status, eta(ISO), site, addr, city, zip, wo, tk, closes, base, travel, note}
+   ===================================================== */
+let uid = 1;
+const nid = () => 'r' + (uid++);
+
+function mk(status,eta,site,wo,tk,addr,city,zip,closes,base,travel,note){
+  return {id:nid(),status,eta,site,wo,tk,addr,city,zip,closes,base,travel,note};
+}
+
+let customers = [
+  {
+    id:'c1', name:'Acme Retail Group', subtitle:'Q2 2026 exterior maintenance program',
+    deadline:'2026-06-30', defaultBase:350,
+    schedule:[
+      mk('invoiced','2026-05-18','1018','4001239','77015240','208 Hewitt Dr','Westbrook','76712','',260,0,''),
+      mk('invoiced','2026-05-17','1027','4001370','77010017','2970 Frontage Hwy','Oak Hills','76087','',260,75,'REVISIT +$75'),
+      mk('completed','2026-06-08','1031','4001445','77013321','2807 W. Washington','Stoneville','76401','',260,0,'NO WATER'),
+      mk('completed','2026-06-08','1032','4001348','77012521','1015 W. Washington St.','Stoneville','76401','',260,0,''),
+      mk('completed','2026-06-09','1040','4001391','77015956','140 S Hwy 175','Seagrove','75159','',350,0,''),
+      mk('completed','2026-06-09','1041','4001677','77014446','250 E. Hwy 175','Kaufield','75142','',350,0,''),
+      mk('completed','2026-06-10','1045','4001396','77013799','168 S. Collins Rd','Sunridge','75182','10pm',350,0,''),
+      mk('today','2026-06-11','1052','4001046','77017774','5040 E Frontage Rd','Fairview','75189','9pm',350,0,''),
+      mk('today','2026-06-11','1053','4001442','77016160','624 W. Interstate 30','Roy City','75189','9pm',350,0,''),
+      mk('upcoming','2026-06-15','1060','4001359','77016450','2918 US Hwy 75','Sherwood','75090','10pm',350,99,''),
+      mk('upcoming','2026-06-15','1061','4001440','77013869','3121 Regency Ln','Denholm','75020','9pm',350,0,''),
+      mk('upcoming','2026-06-16','1064','4001365','77017532','3138 Interstate 30','Greenfield','75402','10pm',350,99,''),
+      mk('upcoming','2026-06-16','1065','4001439','77014367','1401 Prim St','Commerce','75428','8pm',350,0,''),
+      mk('upcoming','2026-06-18','1070','4001358','77016502','950 E Central Ave','Ennistown','75119','10pm',350,99,''),
+      mk('upcoming','2026-06-18','1071','4001441','77016152','2004 S Hwy 287','Corsair','75110','10pm',350,0,''),
+      mk('upcoming','2026-06-21','1076','4001447','77011311','1118 W Main St','Lakeshore','75156','9pm',350,99,''),
+      mk('upcoming','2026-06-21','1077','4001411','77016333','18975 W Frontage Rd','Maple Bend','75147','9pm',350,0,''),
+      mk('upcoming','2026-06-22','1082','4002173','77014573','605 State Hwy 31','Chandlerton','75758','9pm',350,99,''),
+      mk('upcoming','2026-06-22','1083','4001444','77013804','1010 E Tyler St','Athena','75751','10pm',350,0,''),
+      mk('upcoming','2026-06-23','1088','4002165','77013809','598 S Jackson St','Jacksonboro','75766','10pm',350,99,''),
+      mk('upcoming','2026-06-23','1089','4001819','77010324','2228 S Loop 256','Palmera','75801','10pm',350,0,''),
+      mk('upcoming','2026-06-24','1094','4001360','77016517','3217 Sherwood Dr','San Marcos W','76901','9pm',350,99,''),
+      mk('upcoming','2026-06-24','1095','4001448','77018995','401 W. Third Street','San Marcos W','76903','10pm',350,0,''),
+      mk('upcoming','2026-06-25','1096','4001356','77014477','1225 Knicker Rd.','San Marcos W','76904','9pm',350,99,''),
+      mk('upcoming','2026-06-25','1097','4001352','77015768','5651 Sherwood Way','San Marcos W','76904','9:30pm',350,0,''),
+    ],
+    excluded:[
+      {city:'West Mesa',site:'2010',addr:'1893 N. Trevino Dr'},
+      {city:'West Mesa',site:'2011',addr:'2300 North Mesa'},
+      {city:'West Mesa',site:'2012',addr:'1325 Dieter Rd'},
+      {city:'West Mesa',site:'2013',addr:'5650 N. Desert Blvd'},
+      {city:'Longwood',site:'2045',addr:'407 W Loop 281'},
+      {city:'Longwood',site:'2046',addr:'3073 N Eastman Road'},
+      {city:'Terrace',site:'2058',addr:'1620 SH 34 South'},
+      {city:'Terrace',site:'2059',addr:'1291 FM 148'},
+      {city:'Wichita Plains',site:'2062',addr:'2908 Kemp Blvd'},
+      {city:'Wichita Plains',site:'2063',addr:'1415 Southwest Parkway'},
+      {city:'Bonner',site:'2001',addr:'2249 N Hwy 121'},
+      {city:'Fornville',site:'2040',addr:'351 FM 548'},
+    ],
+  },
+  {
+    id:'c2', name:'Summit Property Co.', subtitle:'Quarterly plaza & walkway program',
+    deadline:'2026-07-15', defaultBase:425,
+    schedule:[
+      mk('invoiced','2026-06-02','3010','5102001','88010101','400 Commerce Plaza','Brookfield','75201','',425,0,''),
+      mk('completed','2026-06-09','3011','5102002','88010102','85 Market Square','Brookfield','75204','',425,0,''),
+      mk('today','2026-06-11','3014','5102003','88010103','1200 Riverside Pkwy','Eastbank','75215','11pm',425,0,''),
+      mk('upcoming','2026-06-17','3018','5102004','88010104','310 Garden Terrace','Northgate','75230','10pm',425,60,''),
+      mk('upcoming','2026-06-19','3019','5102005','88010105','77 Union Crossing','Northgate','75231','10pm',425,60,''),
+      mk('upcoming','2026-06-26','3021','5102006','88010106','950 Heritage Loop','Westfall','76001','9pm',425,0,''),
+    ],
+    excluded:[
+      {city:'Southport',site:'4001',addr:'15 Harbor Row'},
+      {city:'Southport',site:'4002',addr:'220 Lighthouse Ave'},
+    ],
+  },
+];
+let activeId = 'c1';
+const active = () => customers.find(c=>c.id===activeId);
+
+/* =====================================================
+   HELPERS
+   ===================================================== */
+const $ = id => document.getElementById(id);
+const fmt = n => '$' + Number(n||0).toLocaleString('en-US');
+const dShort = iso => iso ? iso.slice(5).replace('-','/') : '—';
+const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const STATUS_META = {
+  invoiced:{label:'Invoiced'}, completed:{label:'Completed'},
+  today:{label:'Today'}, upcoming:{label:'Upcoming'},
+};
+const STATUS_ORDER = ['invoiced','completed','today','upcoming'];
+
+function toast(msg){
+  const el = document.createElement('div');
+  el.className='toast'; el.textContent=msg;
+  $('toasts').appendChild(el);
+  setTimeout(()=>el.remove(), 3200);
+}
+function slug(s){ return String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
+
+function toISO(v){
+  if(v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
+  if(typeof v === 'number' && v > 20000){ // excel serial date
+    return new Date(Math.round((v-25569)*86400*1000)).toISOString().slice(0,10);
+  }
+  const s = String(v??'').trim();
+  if(!s) return '';
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?$/);
+  if(m){
+    const y = m[3] ? (m[3].length===2 ? '20'+m[3] : m[3]) : CONFIG.today.slice(0,4);
+    return `${y}-${String(m[1]).padStart(2,'0')}-${String(m[2]).padStart(2,'0')}`;
+  }
+  const d = new Date(s);
+  return isNaN(d) ? '' : d.toISOString().slice(0,10);
+}
+function normStatus(v){
+  const s = String(v??'').toLowerCase();
+  if(s.includes('invoic')) return 'invoiced';
+  if(s.includes('complete')||s.includes('done')) return 'completed';
+  if(s.includes('today')||s.includes('progress')) return 'today';
+  return 'upcoming';
+}
+function toNum(v){
+  const n = parseFloat(String(v??'').replace(/[$,\s]/g,''));
+  return isNaN(n) ? 0 : n;
+}
+
+/* =====================================================
+   LOGIN
+   ===================================================== */
+function tryLogin(){
+  if($('loginUser').value.trim()===CONFIG.username && $('loginPass').value===CONFIG.password){
+    $('loginErr').classList.remove('show');
+    $('loginView').style.display='none';
+    $('appView').style.display='block';
+    renderAll();
+  } else {
+    $('loginErr').classList.add('show');
+    $('loginPass').value=''; $('loginPass').focus();
+  }
+}
+$('loginBtn').addEventListener('click',tryLogin);
+['loginUser','loginPass'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter')tryLogin();}));
+$('logoutBtn').addEventListener('click',()=>{
+  $('appView').style.display='none';
+  $('loginView').style.display='flex';
+  $('loginUser').value=''; $('loginPass').value=''; $('loginUser').focus();
+});
+
+/* =====================================================
+   RENDER
+   ===================================================== */
+function calc(c){
+  const counts={invoiced:0,completed:0,today:0,upcoming:0};
+  let total=0,invoiced=0,completed=0,today=0,upcoming=0,travel=0;
+  c.schedule.forEach(r=>{
+    counts[r.status]=(counts[r.status]||0)+1;
+    const v=(+r.base||0)+(+r.travel||0);
+    total+=v; travel+=(+r.travel||0);
+    if(r.status==='invoiced')invoiced+=v;
+    else if(r.status==='completed')completed+=v;
+    else if(r.status==='today')today+=v;
+    else upcoming+=v;
+  });
+  return {counts,total,invoiced,completed,today,upcoming,travel,done:counts.invoiced+counts.completed};
+}
+
+function renderHeader(){
+  const c=active();
+  $('appTitle').textContent=c.name;
+  $('appSub').textContent=c.subtitle||'';
+  $('deadlineTag').textContent='Cycle deadline: '+(c.deadline?new Date(c.deadline+'T12:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}):'not set');
+  const sel=$('customerSel');
+  sel.innerHTML = customers.map(x=>`<option value="${x.id}" ${x.id===activeId?'selected':''}>${esc(x.name)}</option>`).join('')
+    + `<option value="__add">＋ Add new customer…</option>`;
+}
+
+function renderKpis(){
+  const c=active(), s=calc(c), n=c.schedule.length;
+  $('kpis').innerHTML=`
+    <div class="kpi accent"><div class="label">Active sites</div><div class="value">${n}</div><div class="sub">this cycle</div></div>
+    <div class="kpi"><div class="label">Serviced</div><div class="value">${s.done+s.counts.today}</div><div class="sub">${s.counts.today} in progress today</div></div>
+    <div class="kpi"><div class="label">Remaining</div><div class="value">${s.counts.upcoming}</div><div class="sub">scheduled ahead</div></div>
+    <div class="kpi"><div class="label">Needs invoice</div><div class="value">${s.counts.completed}</div><div class="sub">${fmt(s.completed)} outstanding</div></div>
+    <div class="kpi accent"><div class="label">Cycle value</div><div class="value">${fmt(s.total)}</div><div class="sub">incl. ${fmt(s.travel)} travel/revisit</div></div>
+    <div class="kpi"><div class="label">Excluded</div><div class="value">${c.excluded.length}</div><div class="sub">reassigned this cycle</div></div>`;
+  const pct = n ? Math.round(s.done/n*100) : 0;
+  $('pct').textContent = `${s.done} of ${n} complete · ${pct}%`;
+  $('bar').innerHTML = n ? `
+    <div class="seg-invoiced" style="width:${s.counts.invoiced/n*100}%"></div>
+    <div class="seg-completed" style="width:${s.counts.completed/n*100}%"></div>
+    <div class="seg-today" style="width:${s.counts.today/n*100}%"></div>` : '';
+}
+
+function renderWeek(){
+  const c=active();
+  const fut=[...new Set(c.schedule.filter(r=>r.status==='today'||r.status==='upcoming').map(r=>r.eta).filter(Boolean))].sort().slice(0,3);
+  const rows=c.schedule.filter(r=>fut.includes(r.eta)&&(r.status==='today'||r.status==='upcoming'))
+    .sort((a,b)=>a.eta.localeCompare(b.eta));
+  $('weekCount').textContent=rows.length;
+  $('weekGrid').innerHTML = rows.length ? rows.map(r=>`
+    <div class="week-card">
+      <div class="d">${dShort(r.eta)}${r.eta===CONFIG.today?' · TODAY':''}</div>
+      <div class="s">Site #${esc(r.site)}</div>
+      <div class="c">${esc(r.addr)} — ${esc(r.city)}${r.closes?` · closes ${esc(r.closes)}`:''}</div>
+      <div class="fee">${fmt(r.base)}${r.travel?` <span class="travel">+ ${fmt(r.travel)} travel</span>`:''}</div>
+    </div>`).join('')
+    : `<p class="rev-note">Nothing scheduled ahead. Add a site or import a schedule to get started.</p>`;
+}
+
+function cityOptions(){
+  const cur=$('fCity').value;
+  const cities=[...new Set(active().schedule.map(r=>r.city).filter(Boolean))].sort();
+  $('fCity').innerHTML=`<option value="">All cities</option>`+cities.map(c=>`<option ${c===cur?'selected':''} value="${esc(c)}">${esc(c)}</option>`).join('');
+}
+
+function renderTable(){
+  const c=active();
+  cityOptions();
+  const s=$('fStatus').value, ci=$('fCity').value, fee=$('fFee').value, q=$('fSearch').value.trim().toLowerCase();
+  const rows=c.schedule.filter(r=>{
+    if(s&&r.status!==s)return false;
+    if(ci&&r.city!==ci)return false;
+    if(fee==='travel'&&!+r.travel)return false;
+    if(fee==='base'&&+r.travel)return false;
+    if(q){
+      const hay=`${r.site} ${r.city} ${r.addr} ${r.wo} ${r.tk} ${r.zip}`.toLowerCase();
+      if(!hay.includes(q))return false;
+    }
+    return true;
+  }).sort((a,b)=> (a.eta||'9999').localeCompare(b.eta||'9999') || String(a.site).localeCompare(String(b.site)));
+
+  $('schedCount').textContent=`${rows.length} of ${c.schedule.length}`;
+  if(!rows.length){
+    $('tbody').innerHTML=`<tr class="empty-row"><td colspan="9">${c.schedule.length? 'No sites match these filters. Clear a filter to see more.' : 'This customer has no sites yet. Use ＋ Add site, or Import a CSV / Excel schedule.'}</td></tr>`;
+    return;
+  }
+  $('tbody').innerHTML=rows.map(r=>`
+    <tr data-id="${r.id}">
+      <td>
+        <select class="status-sel s-${r.status}" data-id="${r.id}" aria-label="Status for site ${esc(r.site)}">
+          ${STATUS_ORDER.map(k=>`<option value="${k}" ${k===r.status?'selected':''}>${STATUS_META[k].label}</option>`).join('')}
+        </select>${r.note?`<span class="flag">${esc(r.note)}</span>`:''}
+      </td>
+      <td class="eta">${dShort(r.eta)}</td>
+      <td class="store">#${esc(r.site)}</td>
+      <td class="addr">${esc(r.addr)}, ${esc(r.city)} ${esc(r.zip)}</td>
+      <td class="num">${esc(r.wo)||'—'}</td>
+      <td class="num">${esc(r.tk)||'—'}</td>
+      <td class="num">${esc(r.closes)||'—'}</td>
+      <td class="money">${fmt(r.base)}${+r.travel?`<br><span class="travel">+ ${fmt(r.travel)}</span>`:''}</td>
+      <td><button class="row-edit" data-edit="${r.id}">Edit</button></td>
+    </tr>`).join('');
+
+  $('tbody').querySelectorAll('.status-sel').forEach(sel=>{
+    sel.addEventListener('change',e=>{
+      const row=active().schedule.find(x=>x.id===e.target.dataset.id);
+      if(row){ row.status=e.target.value; renderAll(); toast(`Site #${row.site} marked ${STATUS_META[row.status].label}.`); }
+    });
+  });
+  $('tbody').querySelectorAll('[data-edit]').forEach(btn=>{
+    btn.addEventListener('click',()=>openSiteModal(btn.dataset.edit));
+  });
+}
+
+function renderRevenue(){
+  const c=active(), s=calc(c);
+  $('revGrid').innerHTML=`
+    <div class="rev-card"><div class="l">Invoiced</div><div class="v" style="color:var(--accent)">${fmt(s.invoiced)}</div></div>
+    <div class="rev-card"><div class="l">Completed — invoice now</div><div class="v" style="color:var(--teal)">${fmt(s.completed)}</div></div>
+    <div class="rev-card"><div class="l">In progress today</div><div class="v" style="color:var(--amber)">${fmt(s.today)}</div></div>
+    <div class="rev-card"><div class="l">Pipeline (upcoming)</div><div class="v">${fmt(s.upcoming)}</div></div>
+    <div class="rev-card"><div class="l">Total cycle value</div><div class="v">${fmt(s.total)}</div></div>`;
+  const tf=c.schedule.filter(r=>+r.travel>0).length;
+  $('revNote').textContent = tf
+    ? `${tf} site${tf===1?'':'s'} carry a travel or revisit fee, totaling ${fmt(s.travel)} across the cycle.`
+    : `No travel or revisit fees on this cycle.`;
+}
+
+function renderExcluded(){
+  const c=active();
+  $('exclCount').textContent=c.excluded.length;
+  const byCity={};
+  c.excluded.forEach((x,i)=>{ (byCity[x.city]=byCity[x.city]||[]).push({...x,idx:i}); });
+  const cities=Object.keys(byCity).sort();
+  $('exclGroups').innerHTML = cities.length ? cities.map(city=>`
+    <details class="city-group">
+      <summary><span>${esc(city)}</span><span class="sec-count">${byCity[city].length}</span></summary>
+      <div class="city-list">
+        ${byCity[city].map(x=>`
+          <div class="xrow">
+            <span class="sn">#${esc(x.site)}</span><span class="sa">${esc(x.addr)}</span>
+            <button class="xremove" data-xrm="${x.idx}" title="Remove" aria-label="Remove site ${esc(x.site)}">×</button>
+          </div>`).join('')}
+      </div>
+    </details>`).join('')
+    : `<p class="rev-note">No excluded sites this cycle.</p>`;
+  $('exclGroups').querySelectorAll('[data-xrm]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const x=active().excluded.splice(+b.dataset.xrm,1)[0];
+      renderAll(); toast(`Removed site #${x.site} from the excluded list.`);
+    });
+  });
+}
+
+function renderAll(){
+  renderHeader(); renderKpis(); renderWeek(); renderTable(); renderRevenue(); renderExcluded();
+}
+
+/* =====================================================
+   FILTERS / EXCLUDED ADD
+   ===================================================== */
+['fStatus','fCity','fFee'].forEach(id=>$(id).addEventListener('change',renderTable));
+$('fSearch').addEventListener('input',renderTable);
+$('xAddBtn').addEventListener('click',()=>{
+  const city=$('xCity').value.trim(), site=$('xSite').value.trim(), addr=$('xAddr').value.trim();
+  if(!city||!site){ toast('City and site # are needed to add an excluded site.'); return; }
+  active().excluded.push({city,site,addr});
+  $('xCity').value='';$('xSite').value='';$('xAddr').value='';
+  renderAll(); toast(`Added site #${site} to the excluded list.`);
+});
+
+/* =====================================================
+   MODAL PLUMBING
+   ===================================================== */
+function openOverlay(id){ $(id).classList.add('open'); }
+function closeOverlay(id){ $(id).classList.remove('open'); }
+document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>closeOverlay(b.dataset.close)));
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('open'); }));
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.overlay.open').forEach(o=>o.classList.remove('open')); });
+
+/* =====================================================
+   CUSTOMER MANAGEMENT
+   ===================================================== */
+let custMode='add'; // add | edit
+$('customerSel').addEventListener('change',e=>{
+  if(e.target.value==='__add'){
+    e.target.value=activeId;
+    openCustomerModal('add');
+  } else {
+    activeId=e.target.value;
+    renderAll();
+    toast(`Switched to ${active().name}.`);
+  }
+});
+$('editCustomerBtn').addEventListener('click',()=>openCustomerModal('edit'));
+
+function openCustomerModal(mode){
+  custMode=mode;
+  const c=active();
+  $('custModalTitle').textContent = mode==='add' ? 'Add customer' : 'Edit customer';
+  $('cName').value = mode==='edit' ? c.name : '';
+  $('cSub').value = mode==='edit' ? c.subtitle : '';
+  $('cDeadline').value = mode==='edit' ? c.deadline : '';
+  $('cBase').value = mode==='edit' ? c.defaultBase : 350;
+  $('cDeleteBtn').style.display = (mode==='edit' && customers.length>1) ? 'inline-flex' : 'none';
+  openOverlay('customerOverlay');
+  $('cName').focus();
+}
+$('cSaveBtn').addEventListener('click',()=>{
+  const name=$('cName').value.trim();
+  if(!name){ toast('Give the customer a name first.'); return; }
+  if(custMode==='add'){
+    const c={ id:'c'+Date.now(), name, subtitle:$('cSub').value.trim(),
+      deadline:$('cDeadline').value, defaultBase:toNum($('cBase').value)||350, schedule:[], excluded:[] };
+    customers.push(c); activeId=c.id;
+    toast(`${name} added. Start with ＋ Add site or Import a schedule.`);
+  } else {
+    const c=active();
+    c.name=name; c.subtitle=$('cSub').value.trim();
+    c.deadline=$('cDeadline').value; c.defaultBase=toNum($('cBase').value)||c.defaultBase;
+    toast('Customer details updated.');
+  }
+  closeOverlay('customerOverlay'); renderAll();
+});
+$('cDeleteBtn').addEventListener('click',()=>{
+  const c=active();
+  if(!confirm(`Delete ${c.name} and all of its sites? This can't be undone in this session.`)) return;
+  customers=customers.filter(x=>x.id!==c.id);
+  activeId=customers[0].id;
+  closeOverlay('customerOverlay'); renderAll();
+  toast(`${c.name} deleted.`);
+});
+
+/* =====================================================
+   SITE ADD / EDIT
+   ===================================================== */
+let editingSiteId=null;
+$('addSiteBtn').addEventListener('click',()=>openSiteModal(null));
+
+function openSiteModal(id){
+  editingSiteId=id;
+  const c=active();
+  const r=id ? c.schedule.find(x=>x.id===id) : null;
+  $('siteModalTitle').textContent = r ? `Edit site #${r.site}` : 'Add site';
+  $('sStatus').value = r?r.status:'upcoming';
+  $('sEta').value = r?r.eta:'';
+  $('sSite').value = r?r.site:'';
+  $('sCloses').value = r?r.closes:'';
+  $('sAddr').value = r?r.addr:'';
+  $('sCity').value = r?r.city:'';
+  $('sZip').value = r?r.zip:'';
+  $('sWo').value = r?r.wo:'';
+  $('sTk').value = r?r.tk:'';
+  $('sBase').value = r?r.base:c.defaultBase;
+  $('sTravel').value = r?r.travel:0;
+  $('sNote').value = r?r.note:'';
+  $('sDeleteBtn').style.display = r ? 'inline-flex' : 'none';
+  openOverlay('siteOverlay');
+  $('sSite').focus();
+}
+$('sSaveBtn').addEventListener('click',()=>{
+  const site=$('sSite').value.trim();
+  if(!site){ toast('A site # is required.'); return; }
+  const vals={
+    status:$('sStatus').value, eta:$('sEta').value, site,
+    closes:$('sCloses').value.trim(), addr:$('sAddr').value.trim(),
+    city:$('sCity').value.trim(), zip:$('sZip').value.trim(),
+    wo:$('sWo').value.trim(), tk:$('sTk').value.trim(),
+    base:toNum($('sBase').value), travel:toNum($('sTravel').value),
+    note:$('sNote').value.trim(),
+  };
+  const c=active();
+  if(editingSiteId){
+    Object.assign(c.schedule.find(x=>x.id===editingSiteId), vals);
+    toast(`Site #${site} updated.`);
+  } else {
+    c.schedule.push({id:nid(),...vals});
+    toast(`Site #${site} added to ${c.name}.`);
+  }
+  closeOverlay('siteOverlay'); renderAll();
+});
+$('sDeleteBtn').addEventListener('click',()=>{
+  const c=active();
+  const r=c.schedule.find(x=>x.id===editingSiteId);
+  if(!confirm(`Delete site #${r.site}?`)) return;
+  c.schedule=c.schedule.filter(x=>x.id!==editingSiteId);
+  closeOverlay('siteOverlay'); renderAll();
+  toast(`Site #${r.site} deleted.`);
+});
+
+/* =====================================================
+   IMPORT — CSV / EXCEL
+   ===================================================== */
+let pendingRows=null;
+$('importBtn').addEventListener('click',()=>{
+  pendingRows=null;
+  $('fileLabel').textContent='No file selected.';
+  $('impConfirmBtn').disabled=true;
+  $('fileInput').value='';
+  openOverlay('importOverlay');
+});
+$('pickFileBtn').addEventListener('click',()=>$('fileInput').click());
+$('fileInput').addEventListener('change',e=>{
+  const f=e.target.files[0];
+  if(!f) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array',cellDates:true});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const json=XLSX.utils.sheet_to_json(ws,{defval:''});
+      pendingRows=json.map(mapImportRow).filter(r=>r.site);
+      $('fileLabel').innerHTML=`<span class="file-name">${esc(f.name)}</span> — ${pendingRows.length} site${pendingRows.length===1?'':'s'} found.`;
+      $('impConfirmBtn').disabled = pendingRows.length===0;
+      if(!pendingRows.length) toast('No usable rows found — check that the file has a Site column.');
+    }catch(err){
+      console.error(err);
+      toast('That file couldn\'t be read. Use .csv, .xlsx, or .xls.');
+    }
+  };
+  reader.readAsArrayBuffer(f);
+});
+function pick(obj,...names){
+  const keys=Object.keys(obj);
+  for(const n of names){
+    const k=keys.find(k=>k.toLowerCase().replace(/[^a-z0-9]/g,'')===n);
+    if(k!==undefined) return obj[k];
+  }
+  return '';
+}
+function mapImportRow(o){
+  return {
+    id:nid(),
+    status:normStatus(pick(o,'status')),
+    eta:toISO(pick(o,'eta','serviceeta','date','scheduled')),
+    site:String(pick(o,'site','sitenumber','site#','store','location','id')).trim(),
+    addr:String(pick(o,'address','streetaddress','addr')).trim(),
+    city:String(pick(o,'city')).trim(),
+    zip:String(pick(o,'zip','zipcode','postal')).trim(),
+    wo:String(pick(o,'wo','wonumber','workorder','wo#')).trim(),
+    tk:String(pick(o,'ticket','ticketnumber','ticket#','wt','wt#')).trim(),
+    closes:String(pick(o,'closes','closetime','closing')).trim(),
+    base:toNum(pick(o,'rate','base','baserate','cost','price')) || active().defaultBase,
+    travel:toNum(pick(o,'travel','travelfee','revisit','fee')),
+    note:String(pick(o,'note','notes','flag')).trim(),
+  };
+}
+$('impConfirmBtn').addEventListener('click',()=>{
+  if(!pendingRows||!pendingRows.length) return;
+  const mode=document.querySelector('input[name="impMode"]:checked').value;
+  const c=active();
+  if(mode==='replace') c.schedule=pendingRows;
+  else c.schedule=c.schedule.concat(pendingRows);
+  closeOverlay('importOverlay'); renderAll();
+  toast(`${pendingRows.length} site${pendingRows.length===1?'':'s'} imported into ${c.name}.`);
+  pendingRows=null;
+});
+$('tmplBtn').addEventListener('click',()=>{
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Status','ETA','Site','Address','City','Zip','WO','Ticket','Closes','Rate','Travel','Note'],
+    ['Upcoming','2026-06-20','1100','123 Main St','Springfield','75001','4002000','77020000','10pm',350,0,''],
+  ]);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Schedule');
+  XLSX.writeFile(wb,'schedule-template.csv',{bookType:'csv'});
+  toast('Template downloaded.');
+});
+
+/* =====================================================
+   EXPORT — EXCEL / CSV / PDF / PRINT
+   ===================================================== */
+$('exportBtn').addEventListener('click',e=>{
+  e.stopPropagation();
+  $('exportMenu').classList.toggle('open');
+});
+document.addEventListener('click',()=>$('exportMenu').classList.remove('open'));
+
+function schedAoA(c){
+  const head=['Status','ETA','Site','Address','City','Zip','WO','Ticket','Closes','Rate','Travel','Note'];
+  const body=c.schedule.map(r=>[
+    STATUS_META[r.status].label, r.eta, r.site, r.addr, r.city, r.zip, r.wo, r.tk, r.closes, +r.base||0, +r.travel||0, r.note
+  ]);
+  return [head,...body];
+}
+function summaryAoA(c){
+  const s=calc(c);
+  return [
+    [c.name],
+    [c.subtitle||''],
+    ['Cycle deadline', c.deadline||''],
+    [],
+    ['Active sites', c.schedule.length],
+    ['Invoiced', s.counts.invoiced, fmt(s.invoiced)],
+    ['Completed — needs invoice', s.counts.completed, fmt(s.completed)],
+    ['In progress today', s.counts.today, fmt(s.today)],
+    ['Upcoming', s.counts.upcoming, fmt(s.upcoming)],
+    ['Travel / revisit fees', '', fmt(s.travel)],
+    ['Total cycle value', '', fmt(s.total)],
+    [],
+    ['Excluded sites', c.excluded.length],
+  ];
+}
+
+$('exXlsx').addEventListener('click',()=>{
+  const c=active();
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryAoA(c)), 'Summary');
+  const ws=XLSX.utils.aoa_to_sheet(schedAoA(c));
+  ws['!cols']=[{wch:12},{wch:11},{wch:8},{wch:28},{wch:14},{wch:7},{wch:10},{wch:10},{wch:8},{wch:7},{wch:7},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['City','Site','Address'],...c.excluded.map(x=>[x.city,x.site,x.addr])]), 'Excluded');
+  XLSX.writeFile(wb, `${slug(c.name)}-cycle.xlsx`);
+  toast('Excel workbook downloaded.');
+});
+
+$('exCsv').addEventListener('click',()=>{
+  const c=active();
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(schedAoA(c)), 'Schedule');
+  XLSX.writeFile(wb, `${slug(c.name)}-schedule.csv`, {bookType:'csv'});
+  toast('CSV downloaded.');
+});
+
+$('exPdf').addEventListener('click',()=>{
+  const c=active(), s=calc(c);
+  const { jsPDF } = window.jspdf;
+  const doc=new jsPDF({orientation:'landscape',unit:'pt',format:'letter'});
+  doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(28,36,48);
+  doc.text(c.name, 40, 42);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(93,107,122);
+  doc.text(`${c.subtitle||''}   ·   Cycle deadline: ${c.deadline||'—'}   ·   Generated ${CONFIG.today}`, 40, 58);
+  doc.setFontSize(10); doc.setTextColor(28,36,48);
+  doc.text(`Sites: ${c.schedule.length}    Invoiced: ${s.counts.invoiced} (${fmt(s.invoiced)})    Completed: ${s.counts.completed} (${fmt(s.completed)})    Upcoming: ${s.counts.upcoming} (${fmt(s.upcoming)})    Total cycle value: ${fmt(s.total)}`, 40, 80);
+  const aoa=schedAoA(c);
+  doc.autoTable({
+    head:[aoa[0]], body:aoa.slice(1), startY:96,
+    styles:{fontSize:8,cellPadding:4,textColor:[28,36,48]},
+    headStyles:{fillColor:[47,93,143],textColor:255,fontStyle:'bold'},
+    alternateRowStyles:{fillColor:[244,246,248]},
+    columnStyles:{9:{halign:'right'},10:{halign:'right'}},
+    margin:{left:40,right:40},
+  });
+  if(c.excluded.length){
+    const y=doc.lastAutoTable.finalY+24;
+    doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text('Not serviced this cycle', 40, y);
+    doc.autoTable({
+      head:[['City','Site','Address']],
+      body:c.excluded.map(x=>[x.city,x.site,x.addr]),
+      startY:y+10,
+      styles:{fontSize:8,cellPadding:4,textColor:[28,36,48]},
+      headStyles:{fillColor:[93,107,122],textColor:255,fontStyle:'bold'},
+      alternateRowStyles:{fillColor:[244,246,248]},
+      margin:{left:40,right:40},
+    });
+  }
+  doc.save(`${slug(c.name)}-report.pdf`);
+  toast('PDF report downloaded.');
+});
+
+$('exPrint').addEventListener('click',()=>window.print());
+window.addEventListener('beforeprint',()=>document.querySelectorAll('details').forEach(d=>d.open=true));
+</script>
+</body>
+</html>
