@@ -14,8 +14,28 @@ A single-file operations dashboard for managing multi-site service cycles. Multi
 ## Stack
 
 - `index.html` — the entire application (vanilla JS, no build step)
-- `server.js` — minimal Express static server
+- `server.js` — Express static server + the optional Outlook→ACH payments agent (Microsoft Graph) + `/api/*`
 - Client libraries via CDN: SheetJS (xlsx), jsPDF + autotable
+
+## Outlook ACH payments agent (optional)
+
+The **Payments** section records ACH remittances (amount, date, customer) parsed from the bank's remittance `.csv`. You can import one by hand or let the agent pull them from Outlook automatically.
+
+To enable the agent, register an app in your Microsoft 365 tenant (Entra ID → App registrations) with **application** permission `Mail.Read` (admin-consented), create a client secret, then set these env vars (Railway → service → Variables, or local `node --env-file=.env server.js`):
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `GRAPH_TENANT_ID` | yes | Directory (tenant) ID |
+| `GRAPH_CLIENT_ID` | yes | Application (client) ID |
+| `GRAPH_CLIENT_SECRET` | yes | client secret value |
+| `GRAPH_MAILBOX` | yes | mailbox to watch (e.g. `ops@…`) |
+| `ACH_FROM` | no | sender filter (e.g. `vendor.hotline@brinker.com`) |
+| `ACH_SUBJECT` | no | subject substring (default `Remit Advice`) |
+| `POLL_INTERVAL_MS` | no | poll cadence (default `300000`, min `60000`) |
+
+Without these, the agent stays off and the app runs as a plain static server. Health/data: `GET /api/status`, `GET /api/payments`.
+
+> **Note:** server-side payments currently persist to `data/payments.json`, which is **ephemeral on Railway**, and `/api/payments` is unauthenticated. A Postgres datastore + real auth are the planned durable/secure replacement before handling live financial data.
 
 ## Run locally
 

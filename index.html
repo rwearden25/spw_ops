@@ -440,6 +440,29 @@
     </div>
   </details>
 
+  <details class="section" id="secPayments" open>
+    <summary>
+      <span class="sec-title">Payments <span class="sec-count" id="payCount"></span></span>
+      <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </summary>
+    <div class="sec-body">
+      <p class="rev-note" style="margin-bottom:12px;">ACH remittances pulled from Outlook — amount, date, and the customer each payment is from. Once live Outlook sync is configured they appear here automatically; until then, import a remittance <code>.csv</code> or run a test.</p>
+      <div class="tbl-scroll">
+        <table>
+          <thead>
+            <tr><th>Received</th><th>From (payer)</th><th>Customer</th><th style="text-align:right">Amount</th><th>Reference</th><th>Source</th></tr>
+          </thead>
+          <tbody id="payBody"></tbody>
+        </table>
+      </div>
+      <div class="excl-add" style="margin-top:12px">
+        <button class="btn btn-ghost" id="payImportBtn">Import remittance (.csv)</button>
+        <button class="btn btn-ghost" id="payTestBtn">Simulate ACH email</button>
+        <input type="file" id="payFile" accept=".csv,.xlsx,.xls" style="display:none">
+      </div>
+    </div>
+  </details>
+
   <details class="section" id="secRevenue">
     <summary>
       <span class="sec-title">Revenue Summary</span>
@@ -648,6 +671,7 @@ const ACCENTS = {
 const DEFAULT_PREFS = { accent:'blue', density:'comfortable', defaultCustomer:'' };
 let users = SEED_USERS.map(u=>({...u}));
 let prefs = {...DEFAULT_PREFS};
+let payments = [];   // ACH remittances: {id, ref, payer, customerId, amount, currency, dateISO, receivedAt, source}
 let currentUser = null;
 const isAdmin = () => !!currentUser && currentUser.role==='admin';
 function loadStore(){
@@ -655,10 +679,16 @@ function loadStore(){
     const s = JSON.parse(localStorage.getItem(STORE_KEY)||'null');
     if(s && Array.isArray(s.users) && s.users.length) users = s.users;
     if(s && s.prefs) prefs = {...DEFAULT_PREFS, ...s.prefs};
+    if(s && Array.isArray(s.payments)) payments = s.payments;
+    if(s && Array.isArray(s.customers) && s.customers.length){
+      customers = s.customers;
+      if(typeof s.activeId==='string') activeId = s.activeId;
+      if(!customers.some(c=>c.id===activeId)) activeId = customers[0].id;
+    }
   }catch(e){ /* ignore corrupt / unavailable store */ }
 }
 function saveStore(){
-  try{ localStorage.setItem(STORE_KEY, JSON.stringify({users, prefs})); }catch(e){ /* storage unavailable */ }
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify({users, prefs, payments, customers, activeId})); }catch(e){ /* storage unavailable */ }
 }
 
 /* =====================================================
@@ -803,6 +833,7 @@ function tryLogin(){
     applyPrefs();
     applyRoleVisibility();
     renderAll();
+    syncFromAgent();
   } else {
     $('loginErr').classList.add('show');
     $('loginPass').value=''; $('loginPass').focus();
@@ -985,7 +1016,8 @@ function renderExcluded(){
 }
 
 function renderAll(){
-  renderHeader(); renderKpis(); renderWeek(); renderTable(); renderRevenue(); renderExcluded();
+  renderHeader(); renderKpis(); renderWeek(); renderTable(); renderPayments(); renderRevenue(); renderExcluded();
+  saveStore();   // persist customer/schedule/excluded edits (they survive reload now)
 }
 
 /* =====================================================
@@ -1408,9 +1440,142 @@ $('pSaveBtn').addEventListener('click',()=>{
   closeOverlay('profileOverlay'); toast('Settings saved.');
 });
 
-/* ---- init: load saved users/prefs and apply theme before login ---- */
+/* =====================================================
+   PAYMENTS — ACH remittance ingestion + notify
+   Parses the remittance CSV (stacked payment + transaction tables),
+   matches the payer to a customer, records it, and toasts a notice.
+   Same pipeline whether the CSV is imported by hand or fed by the
+   Outlook/Graph agent.
+   ===================================================== */
+function payDate(v){
+  // remittance CSVs use DD/MM/YYYY (e.g. 13/05/2026); fall back to toISO()
+  const s = String(v??'').trim();
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if(m){
+    const y = m[3].length===2 ? '20'+m[3] : m[3];
+    return `${y}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
+  }
+  return toISO(v);
+}
+function matchCustomer(payer){
+  const p = String(payer||'').toLowerCase().trim();
+  if(!p) return null;
+  const hit = customers.find(c=>{
+    const n = c.name.toLowerCase();
+    return p.includes(n) || n.includes(p) || (c.payerAliases||[]).some(a=>p.includes(String(a).toLowerCase()));
+  });
+  return hit ? hit.id : null;
+}
+function parseRemittance(rows){
+  // rows = array-of-arrays; find the 'Payer' header row, read the row beneath it
+  const norm = x => String(x??'').trim().toLowerCase();
+  const hi = rows.findIndex(r => Array.isArray(r) && r.some(c => norm(c)==='payer'));
+  if(hi<0 || !rows[hi+1]) return null;
+  const head = rows[hi].map(norm), data = rows[hi+1];
+  const get = name => { const i = head.indexOf(name); return i<0 ? '' : data[i]; };
+  const payer = String(get('payer')||'').trim();
+  if(!payer) return null;
+  let amount = toNum(get('paymentamount'));
+  if(!amount){ // fall back to the transaction block's AmountPaid
+    const ti = rows.findIndex(r => Array.isArray(r) && r.some(c => norm(c)==='amountpaid'));
+    if(ti>=0 && rows[ti+1]){ const th = rows[ti].map(norm); amount = toNum(rows[ti+1][th.indexOf('amountpaid')]); }
+  }
+  return {
+    payer, amount,
+    currency: String(get('paymentcurrency')||'USD').trim(),
+    ref: String(get('paymentreferencenumber')||'').trim(),
+    dateISO: payDate(get('paymentdate')),
+  };
+}
+function recordPayment(p, source, receivedAt, opts){
+  opts = opts||{};
+  if(!p || !p.payer){ if(!opts.silentDup) toast('No payment found in that file.'); return; }
+  const dk = p.ref || `${String(p.payer).toLowerCase()}|${p.amount}|${p.dateISO}`;
+  if(payments.some(x=> (x.ref || `${String(x.payer).toLowerCase()}|${x.amount}|${x.dateISO}`)===dk)){
+    if(!opts.silentDup) toast(`Payment ${p.ref?('ref '+p.ref):''} is already recorded.`);
+    return;
+  }
+  const pay = {
+    id:'pay'+(uid++), ref:p.ref, payer:p.payer, customerId:matchCustomer(p.payer),
+    amount:p.amount, currency:p.currency||'USD', dateISO:p.dateISO,
+    receivedAt: receivedAt || p.dateISO, source: source||'import',
+  };
+  payments.unshift(pay);
+  saveStore(); renderPayments();
+  const cust = pay.customerId ? (customers.find(c=>c.id===pay.customerId)||{}).name : pay.payer;
+  const dt = pay.receivedAt ? new Date(pay.receivedAt+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+  toast(`ACH received — ${fmt(pay.amount)}${pay.currency&&pay.currency!=='USD'?' '+pay.currency:''} on ${dt} from ${cust}${pay.ref?` (ref ${pay.ref})`:''}.`);
+}
+function renderPayments(){
+  $('payCount').textContent = payments.length;
+  if(!payments.length){
+    $('payBody').innerHTML = `<tr class="empty-row"><td colspan="6">No payments yet. Import a remittance .csv or run a test — once Outlook sync is live they'll land here automatically.</td></tr>`;
+    return;
+  }
+  $('payBody').innerHTML = payments.map(p=>{
+    const matched = p.customerId && customers.some(c=>c.id===p.customerId);
+    const custCell = matched
+      ? `${esc((customers.find(c=>c.id===p.customerId)||{}).name)} <span class="flag" style="background:var(--teal-soft);color:var(--teal)">matched</span>`
+      : `<select class="status-sel s-upcoming" data-passign="${p.id}" style="max-width:190px">
+           <option value="">Unmatched — assign…</option>
+           ${customers.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}
+         </select>`;
+    return `<tr>
+      <td class="eta">${p.receivedAt?dShort(p.receivedAt):'—'}</td>
+      <td class="store">${esc(p.payer)}</td>
+      <td>${custCell}</td>
+      <td class="money">${fmt(p.amount)}${p.currency&&p.currency!=='USD'?` ${esc(p.currency)}`:''}</td>
+      <td class="num">${esc(p.ref)||'—'}</td>
+      <td class="num">${esc(p.source)}</td>
+    </tr>`;
+  }).join('');
+  $('payBody').querySelectorAll('[data-passign]').forEach(sel=>sel.addEventListener('change',e=>{
+    const p = payments.find(x=>x.id===e.target.dataset.passign);
+    if(p){ p.customerId = e.target.value||null; saveStore(); renderPayments(); if(p.customerId) toast('Payment assigned to customer.'); }
+  }));
+}
+$('payImportBtn').addEventListener('click',()=>$('payFile').click());
+$('payFile').addEventListener('change',e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    try{
+      const wb = XLSX.read(new Uint8Array(ev.target.result),{type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      recordPayment(parseRemittance(rows),'import');
+    }catch(err){ console.error(err); toast('Could not read that remittance file. Use the .csv from the email.'); }
+    $('payFile').value='';
+  };
+  reader.readAsArrayBuffer(f);
+});
+$('payTestBtn').addEventListener('click',()=>{
+  // mirrors the Brinker "RemittanceAdviceVirtualCard_321130.csv" sample
+  const ref = payments.some(x=>x.ref==='321130') ? 'TEST-'+(uid++) : '321130';
+  recordPayment({ payer:'Brinker International Payroll Company LP', amount:350, currency:'USD', ref, dateISO:'2026-06-12' }, 'test', '2026-06-11');
+});
+
+/* ---- live Outlook agent sync: pull server-recorded payments into the UI ----
+   When server.js runs with the Graph agent enabled, it exposes /api/payments.
+   We poll it and feed each new one through the same recordPayment pipeline
+   (silent on duplicates, toast on genuinely new). No-ops when there's no
+   backend (e.g. opened as a static file). */
+async function syncFromAgent(){
+  try{
+    const st = await fetch('/api/status').then(r=>r.ok?r.json():null);
+    if(!st || !st.agentEnabled) return;
+    const list = await fetch('/api/payments').then(r=>r.ok?r.json():[]);
+    (list||[]).forEach(p=>recordPayment(
+      {payer:p.payer, amount:p.amount, currency:p.currency, ref:p.ref, dateISO:p.dateISO},
+      p.source||'outlook', p.receivedAt, {silentDup:true}
+    ));
+  }catch(e){ /* backend/API not available — manual + test paths still work */ }
+}
+
+/* ---- init: load saved store and apply theme before login ---- */
 loadStore();
 applyPrefs();
+setInterval(()=>{ if(currentUser) syncFromAgent(); }, 60000);
 </script>
 </body>
 </html>
