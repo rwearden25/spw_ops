@@ -11,5 +11,5 @@ app.get('*', (_req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Field Service Operations running on port ${PORT}`);
+  console.log(`SPW-OPS running on port ${PORT}`);
 });

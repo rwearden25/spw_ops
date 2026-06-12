@@ -3,7 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Field Service Operations</title>
+<title>SPW-OPS</title>
+<meta name="description" content="SPW-OPS — field service operations dashboard: schedules, KPIs, invoicing, and reporting.">
+<meta name="application-name" content="SPW-OPS">
+<meta name="apple-mobile-web-app-title" content="SPW-OPS">
+<meta name="theme-color" content="#2f5d8f">
+<!-- Link preview when the URL is shared (SMS / iMessage / social) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SPW-OPS">
+<meta property="og:title" content="SPW-OPS">
+<meta property="og:description" content="Field service operations dashboard — schedules, KPIs, invoicing, and reporting.">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="SPW-OPS">
+<meta name="twitter:description" content="Field service operations dashboard.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%232f5d8f'/%3E%3Cpath d='M4 13l5 5L20 7' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
@@ -76,6 +89,7 @@
   }
   .brand{display:flex;align-items:center;gap:12px;min-width:0;}
   .brand .mark{width:38px;height:38px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .brand .wordmark{font-size:10.5px;font-weight:800;letter-spacing:1.2px;color:var(--accent);text-transform:uppercase;line-height:1;margin-bottom:2px;}
   .brand h1{font-size:19px;font-weight:700;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .brand p{color:var(--ink-soft);font-size:12.5px;margin-top:1px;}
   .topbar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
@@ -307,7 +321,7 @@
 <div id="loginView">
   <div class="login-card">
     <div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 13l5 5L20 7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <h1>Field Service Operations</h1>
+    <h1>SPW-OPS</h1>
     <p class="sub">Sign in to manage your service cycles.</p>
     <div class="login-err" id="loginErr">Incorrect username or password. Try again.</div>
     <div class="field"><label for="loginUser">Username</label><input id="loginUser" type="text" autocomplete="username" autofocus></div>
@@ -324,6 +338,7 @@
     <div class="brand">
       <div class="mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 13l5 5L20 7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div style="min-width:0">
+        <div class="wordmark">SPW-OPS</div>
         <h1 id="appTitle"></h1>
         <p id="appSub"></p>
       </div>
@@ -453,7 +468,7 @@
     </div>
   </details>
 
-  <footer>Field Service Operations — single-file dashboard. Imports CSV / Excel · Exports Excel, CSV, PDF.</footer>
+  <footer>SPW-OPS — single-file dashboard. Imports CSV / Excel · Exports Excel, CSV, PDF.</footer>
 </div>
 </div>
 
