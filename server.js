@@ -2,6 +2,14 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const db = require('./db');
+
+// Seed accounts created in Postgres on first run (mirrors the client SEED_USERS).
+// TODO(auth phase): hash these and move login server-side.
+const SEED_USERS = [
+  { username: 'admin',  password: 'adminpasswd', displayName: 'Admin',  role: 'admin'  },
+  { username: 'viewer', password: 'viewer',      displayName: 'Viewer', role: 'member' },
+];
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -152,17 +160,21 @@ async function pollMailbox() {
       if (String(file.contentBytes).length > AGENT.maxAttachB64) { console.warn('[agent] attachment too large — skipped'); continue; }
       const p = parseRemittance(csvToRows(Buffer.from(file.contentBytes, 'base64').toString('utf8')));
       if (!p || !p.payer) continue;                   // reject CSVs with no payer
-      const key = dedupeKey(p, msg.id);
-      if (payments.some(x => dedupeKey(x, x.messageId) === key)) continue;
-      payments.unshift({
+      const rec = {
         id: 'pay' + Date.now() + Math.floor(Math.random() * 1000),
-        ref: p.ref, payer: p.payer, amount: p.amount, currency: p.currency, dateISO: p.dateISO,
+        ref: p.ref, payer: p.payer, customerId: null, amount: p.amount, currency: p.currency, dateISO: p.dateISO,
         receivedAt: (msg.receivedDateTime || '').slice(0, 10) || p.dateISO,
         source: 'outlook', messageId: msg.id, subject: subj,
-      });
-      if (payments.length > 5000) payments.length = 5000;   // bounded retention
-      dirty = true;
-      console.log(`[agent] recorded ACH ${p.ref || '(no ref)'} — ${p.payer} ${p.amount}`);
+      };
+      let inserted;
+      if (db.enabled()) {
+        inserted = !(await db.paymentExistsByMessage(msg.id)) && await db.addPayment(rec);
+      } else {
+        const key = dedupeKey(p, msg.id);
+        if (payments.some(x => dedupeKey(x, x.messageId) === key)) inserted = false;
+        else { payments.unshift(rec); if (payments.length > 5000) payments.length = 5000; dirty = true; inserted = true; }
+      }
+      if (inserted) console.log(`[agent] recorded ACH ${p.ref || '(no ref)'} — ${p.payer} ${p.amount}`);
     }
     if (dirty) savePayments();
     lastPoll = new Date().toISOString(); lastErrorKind = null;
@@ -191,26 +203,40 @@ function requireApiAuth(req, res, next){
 }
 
 app.use(express.json());
-app.get('/api/status', (req, res) => {
+app.get('/api/status', async (req, res) => {
   const out = { agentEnabled };                       // non-sensitive; safe for anyone
-  if(authed(req)) Object.assign(out, { mailbox: AGENT.mailbox, intervalMs: AGENT.intervalMs, lastPoll, lastErrorKind, count: payments.length });
+  if(authed(req)){
+    let count = payments.length;
+    try { if(db.enabled()) count = await db.paymentsCount(); } catch(e){ /* keep fallback */ }
+    Object.assign(out, { mailbox: AGENT.mailbox, intervalMs: AGENT.intervalMs, lastPoll, lastErrorKind, count, db: db.enabled() });
+  }
   res.json(out);
 });
-app.get('/api/payments', requireApiAuth, (_req, res) => res.json(payments));
+app.get('/api/payments', requireApiAuth, async (_req, res) => {
+  try { res.json(db.enabled() ? await db.listPayments() : payments); }
+  catch(e){ console.error('[api] payments read failed:', e.message); res.status(500).json({ error: 'server error' }); }
+});
 
 app.use(express.static(__dirname, { extensions: ['html'] }));
 app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`SPW-OPS running on port ${PORT}`);
-  if (agentEnabled) {
-    console.log(`[agent] Outlook ACH monitor ON — mailbox ${AGENT.mailbox}, every ${Math.round(AGENT.intervalMs / 1000)}s`);
-    if (!AGENT.fromList.length) console.warn('[agent] WARNING: ACH_FROM unset — no sender allowlist. Set it to the exact remittance sender(s) to avoid processing spoofed/unintended mail.');
-    if (!AGENT.requireAuthResults) console.warn('[agent] WARNING: ACH_REQUIRE_AUTH_RESULTS=false — DMARC verification disabled.');
-    if (!API_TOKEN) console.warn('[agent] WARNING: API_TOKEN unset — /api/payments is locked (403). Set API_TOKEN to expose payment data to authorized callers.');
-    pollMailbox();
-    setInterval(pollMailbox, AGENT.intervalMs);
+(async () => {
+  if (db.enabled()) {
+    try { await db.init(SEED_USERS); } catch (e) { console.error('[db] init failed — continuing without DB:', e.message); }
   } else {
-    console.log('[agent] Outlook ACH monitor OFF — set GRAPH_TENANT_ID, GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, GRAPH_MAILBOX to enable.');
+    console.log('[db] no DATABASE_URL — client uses localStorage, agent uses data/payments.json. Set DATABASE_URL to enable Postgres.');
   }
-});
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`SPW-OPS running on port ${PORT}`);
+    if (agentEnabled) {
+      console.log(`[agent] Outlook ACH monitor ON — mailbox ${AGENT.mailbox}, every ${Math.round(AGENT.intervalMs / 1000)}s`);
+      if (!AGENT.fromList.length) console.warn('[agent] WARNING: ACH_FROM unset — no sender allowlist. Set it to the exact remittance sender(s) to avoid processing spoofed/unintended mail.');
+      if (!AGENT.requireAuthResults) console.warn('[agent] WARNING: ACH_REQUIRE_AUTH_RESULTS=false — DMARC verification disabled.');
+      if (!API_TOKEN) console.warn('[agent] WARNING: API_TOKEN unset — /api/payments is locked (403). Set API_TOKEN to expose payment data to authorized callers.');
+      pollMailbox();
+      setInterval(pollMailbox, AGENT.intervalMs);
+    } else {
+      console.log('[agent] Outlook ACH monitor OFF — set GRAPH_TENANT_ID, GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, GRAPH_MAILBOX to enable.');
+    }
+  });
+})();

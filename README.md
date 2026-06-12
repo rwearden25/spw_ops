@@ -41,12 +41,19 @@ Without the `GRAPH_*` vars the agent stays off and the app runs as a plain stati
 
 > **Still required before live financial data:** real per-user auth (the login is a client-side gate, so the API leans on a shared secret), and a **Postgres** datastore — server-side payments currently persist to `data/payments.json`, which is **ephemeral on Railway**.
 
+## Database (Postgres)
+
+Durable storage lives in `db.js` and is **off until `DATABASE_URL` is set** (the app runs fine without it on `localStorage` + the agent's JSON file). On Railway, add a **Postgres** plugin and it injects `DATABASE_URL`; the server then creates its schema (`users`, `customers`, `sites`, `excluded`, `payments`) on boot and persists **payments** there. Use the private `DATABASE_URL` (no SSL); for an external URL set `PGSSLMODE=require` (TLS stays verified). Migrating customers/schedule reads & writes is the next phase (needs server-side auth — see the security notice). See `.env.example`.
+
 ## Run locally
 
 ```bash
 npm install
 npm start
 # http://localhost:3000
+
+# with a local Postgres + agent config:
+# node --env-file=.env server.js
 ```
 
 ## Deploy to Railway

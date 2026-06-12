@@ -60,9 +60,13 @@ Enable the agent with env vars: `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLI
 
 **Security model (financial data, hardened from a review):** the agent only ingests mail matching the *exact* `ACH_FROM` allowlist **and** passing DMARC (`senderAuthenticated()`, fail-closed); attachments must be `.csv` + size-capped; dedupe uses a never-fail-open key. `/api/payments` is **default-deny** — denied with 403 unless `API_TOKEN` is set, then requires `Authorization: Bearer <token>` (timing-safe compare); `/api/status` exposes only `{agentEnabled}` to the unauthenticated, and a coarse `lastErrorKind` (never the raw error) to the authenticated. `matchCustomer()` is exact-allowlist only (no substring) to prevent misattribution. These are stopgaps until real per-user auth lands with Postgres.
 
-## Deferred: Postgres migration
+## Postgres data layer (`db.js`)
 
-The durable datastore is meant to be **Postgres** (Railway plugin → `DATABASE_URL`), replacing both the client `localStorage` store and the server's `data/payments.json`. Scope when picked up: add `pg`, a schema (customers, sites, excluded, payments, users), backend CRUD routes, and refactor the client to read/write via the API instead of in-memory arrays. Blocked on the app being deployed to Railway with a Postgres plugin provisioned.
+`db.js` is the durable store, **dormant until `DATABASE_URL` is set** — without it the module never even `require('pg')`s, so the app runs unchanged. When set, `init()` creates the schema (`users`, `customers`, `sites`, `excluded`, `payments`) and seeds `SEED_USERS`. SSL is off by default (Railway's private network); `PGSSLMODE=require` enables *verified* TLS (avoid `PGSSL_INSECURE`, which disables verification).
+
+**Wired today: payments.** The agent writes via `db.addPayment()` and `/api/payments` reads via `db.listPayments()` when the DB is on; otherwise the in-memory array + `data/payments.json` fallback. Dedupe in DB mode is by `message_id` then the partial-unique `ref` index.
+
+**Staged, not yet wired:** the `customers`/`sites`/`excluded`/`users` functions exist in `db.js` but have no routes yet. Exposing them needs **server-side session auth first** — the browser can't safely read/write business data through an unauthenticated API (same reason payments are token-gated). After auth lands, the client moves off `localStorage` to the API. Not integration-tested against a live DB yet (no local Postgres) — validate on the first Railway deploy.
 
 ## Important gotchas
 
