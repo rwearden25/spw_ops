@@ -41,9 +41,12 @@ railway up
 
 ## Demo credentials
 
-| Username | Password      |
-| -------- | ------------- |
-| `admin`  | `adminpasswd` |
+| Username | Password      | Role   | Can do                                                    |
+| -------- | ------------- | ------ | --------------------------------------------------------- |
+| `admin`  | `adminpasswd` | Admin  | Everything, incl. add/rename/delete customers + manage users |
+| `viewer` | `viewer`      | Member | View, switch customers, filter, open jobs, edit schedule rows |
+
+Each user gets a **Profile & settings** panel (display name, accent color, density, default customer); admins also manage users there. Profiles and preferences persist in the browser's `localStorage`; customer/schedule data stays session-only (export to save it).
 
 ## ⚠️ Security notice
 

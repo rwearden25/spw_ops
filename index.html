@@ -258,6 +258,42 @@
     .chev,.bar div{transition:none;}
     .toast{animation:none;}
   }
+  /* ===== feature additions: clickable kpis · job detail · profile · density ===== */
+  .kpi-link{cursor:pointer;transition:border-color .12s,box-shadow .12s,transform .08s;}
+  .kpi-link:hover{border-color:var(--accent);box-shadow:0 2px 6px rgba(28,36,48,.07),0 12px 30px rgba(28,36,48,.08);}
+  .kpi-link:active{transform:translateY(1px);}
+  .kpi-link:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  .week-card{cursor:pointer;transition:border-color .12s,box-shadow .12s;}
+  .week-card:hover{border-color:var(--accent);box-shadow:var(--shadow);}
+  .week-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  .job-grid{display:grid;grid-template-columns:130px 1fr;gap:9px 16px;font-size:13.5px;align-items:center;}
+  .job-grid .job-k{color:var(--ink-soft);font-weight:600;}
+  .job-grid .job-v{color:var(--ink);}
+
+  .prof-sec{border-top:1px solid var(--line);padding:16px 0;}
+  .prof-sec:first-of-type{border-top:none;padding-top:6px;}
+  .prof-h{font-size:13px;font-weight:700;margin-bottom:11px;display:flex;align-items:center;gap:8px;}
+  .swatches{display:flex;gap:9px;}
+  .swatch{width:26px;height:26px;border-radius:50%;border:2px solid #fff;outline:1px solid var(--line);cursor:pointer;}
+  .swatch.sel{outline:2px solid var(--ink);outline-offset:1px;}
+  .user-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13px;}
+  .user-row:last-child{border-bottom:none;}
+  .user-row .u-name{font-weight:600;}
+  .user-row .u-meta{color:var(--ink-soft);font-size:12px;}
+  .user-row .spacer{flex:1;}
+  .role-pill{font-size:10px;font-weight:700;border-radius:999px;padding:2px 9px;text-transform:uppercase;letter-spacing:.4px;}
+  .role-admin{background:var(--accent-soft);color:var(--accent);}
+  .role-member{background:var(--gray-soft);color:var(--ink-soft);}
+
+  body.compact{font-size:13px;}
+  body.compact td,body.compact th{padding:5px 8px;}
+  body.compact .kpi{padding:10px 13px;}
+  body.compact .kpi .value{font-size:21px;}
+  body.compact .sec-body{padding:11px 14px;}
+  body.compact .progress-card{padding:12px 14px;}
+
   @media print{
     .topbar-actions,.filters,.row-edit,.excl-add,.xremove,#toasts,.subbar .data-note{display:none !important;}
     body{background:#fff;}
@@ -316,6 +352,9 @@
           <button id="exPrint">Print view</button>
         </div>
       </div>
+      <button class="icon-btn" id="profileBtn" title="Profile & settings" aria-label="Profile and settings">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="2"/><path d="M4.5 20c1.3-3.6 4.2-5.2 7.5-5.2s6.2 1.6 7.5 5.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
       <button class="icon-btn" id="logoutBtn" title="Sign out" aria-label="Sign out">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
@@ -343,7 +382,7 @@
     </div>
   </div>
 
-  <details class="section" open>
+  <details class="section" id="secNext" open>
     <summary>
       <span class="sec-title">Next Up <span class="sec-count" id="weekCount"></span></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -351,7 +390,7 @@
     <div class="sec-body"><div class="week-grid" id="weekGrid"></div></div>
   </details>
 
-  <details class="section" open>
+  <details class="section" id="secSchedule" open>
     <summary>
       <span class="sec-title">Service Schedule <span class="sec-count" id="schedCount"></span></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -386,7 +425,7 @@
     </div>
   </details>
 
-  <details class="section">
+  <details class="section" id="secRevenue">
     <summary>
       <span class="sec-title">Revenue Summary</span>
       <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -397,7 +436,7 @@
     </div>
   </details>
 
-  <details class="section">
+  <details class="section" id="secExcluded">
     <summary>
       <span class="sec-title">Not Serviced This Cycle <span class="sec-count" id="exclCount"></span></span>
       <svg class="chev" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -501,13 +540,111 @@
   </div>
 </div>
 
+<!-- ================= JOB DETAIL MODAL ================= -->
+<div class="overlay" id="jobOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="jobModalTitle">
+    <h2 id="jobModalTitle">Job detail</h2>
+    <p class="m-sub" id="jobModalSub"></p>
+    <div id="jobBody"></div>
+    <div class="m-actions">
+      <button class="btn btn-ghost" data-close="jobOverlay">Close</button>
+      <div class="right">
+        <button class="btn btn-primary" id="jobEditBtn">Edit job</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= PROFILE / SETTINGS MODAL ================= -->
+<div class="overlay" id="profileOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+    <h2 id="profileModalTitle">Profile &amp; settings</h2>
+    <p class="m-sub" id="profileWho"></p>
+
+    <div class="prof-sec">
+      <div class="prof-h">Your profile</div>
+      <div class="m-grid">
+        <div class="field"><label for="pName">Display name</label><input id="pName" placeholder="Your name"></div>
+        <div class="field"><label for="pRoleView">Role</label><input id="pRoleView" disabled></div>
+      </div>
+    </div>
+
+    <div class="prof-sec">
+      <div class="prof-h">Appearance</div>
+      <div class="field"><label>Accent color</label><div class="swatches" id="pAccent"></div></div>
+      <div class="field" style="margin-top:12px"><label>Density</label>
+        <div class="radio-row" role="radiogroup" aria-label="Density">
+          <label><input type="radio" name="pDensity" value="comfortable"> Comfortable</label>
+          <label><input type="radio" name="pDensity" value="compact"> Compact</label>
+        </div>
+      </div>
+      <div class="field" style="margin-top:12px"><label for="pDefaultCust">Default customer on login</label>
+        <select id="pDefaultCust"></select>
+      </div>
+    </div>
+
+    <div class="prof-sec admin-only">
+      <div class="prof-h">Users <span class="sec-count" id="userCount"></span></div>
+      <div id="userList"></div>
+      <div class="excl-add" style="margin-top:10px">
+        <input id="uName" placeholder="Display name" aria-label="Display name">
+        <input id="uUser" placeholder="Username" style="width:130px" aria-label="Username">
+        <input id="uPass" placeholder="Password" style="width:130px" aria-label="Password">
+        <select id="uRole" aria-label="Role"><option value="member">Member</option><option value="admin">Admin</option></select>
+        <button class="btn btn-ghost" id="uAddBtn">Add user</button>
+      </div>
+    </div>
+
+    <div class="m-actions">
+      <div class="right">
+        <button class="btn btn-ghost" data-close="profileOverlay">Close</button>
+        <button class="btn btn-primary" id="pSaveBtn">Save changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toasts" aria-live="polite"></div>
 
 <script>
 /* =====================================================
    CONFIG
    ===================================================== */
-const CONFIG = { username:'admin', password:'adminpasswd', today:'2026-06-11' };
+const CONFIG = { today:'2026-06-11' };
+
+/* =====================================================
+   USERS · ROLES · PREFERENCES
+   users: [{username, password, displayName, role:'admin'|'member'}]
+   role 'admin' → manage customers (incl. rename) + manage users
+   role 'member' → view, switch, filter, open jobs, edit schedule rows
+   users + prefs persist to localStorage; customer data stays session-only.
+   ===================================================== */
+const STORE_KEY = 'fso_state_v1';
+const SEED_USERS = [
+  { username:'admin',  password:'adminpasswd', displayName:'Admin',  role:'admin'  },
+  { username:'viewer', password:'viewer',      displayName:'Viewer', role:'member' },
+];
+const ACCENTS = {
+  blue:   { accent:'#2f5d8f', deep:'#274e79', soft:'#e8eff6' },
+  teal:   { accent:'#2a7d6f', deep:'#226256', soft:'#e6f2f0' },
+  violet: { accent:'#5b4b9c', deep:'#493c7e', soft:'#ece9f6' },
+  slate:  { accent:'#465264', deep:'#374050', soft:'#eaedf1' },
+};
+const DEFAULT_PREFS = { accent:'blue', density:'comfortable', defaultCustomer:'' };
+let users = SEED_USERS.map(u=>({...u}));
+let prefs = {...DEFAULT_PREFS};
+let currentUser = null;
+const isAdmin = () => !!currentUser && currentUser.role==='admin';
+function loadStore(){
+  try{
+    const s = JSON.parse(localStorage.getItem(STORE_KEY)||'null');
+    if(s && Array.isArray(s.users) && s.users.length) users = s.users;
+    if(s && s.prefs) prefs = {...DEFAULT_PREFS, ...s.prefs};
+  }catch(e){ /* ignore corrupt / unavailable store */ }
+}
+function saveStore(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify({users, prefs})); }catch(e){ /* storage unavailable */ }
+}
 
 /* =====================================================
    DATA MODEL
@@ -640,10 +777,16 @@ function toNum(v){
    LOGIN
    ===================================================== */
 function tryLogin(){
-  if($('loginUser').value.trim()===CONFIG.username && $('loginPass').value===CONFIG.password){
+  const u = $('loginUser').value.trim(), p = $('loginPass').value;
+  const found = users.find(x=>x.username.toLowerCase()===u.toLowerCase() && x.password===p);
+  if(found){
+    currentUser = found;
     $('loginErr').classList.remove('show');
     $('loginView').style.display='none';
     $('appView').style.display='block';
+    if(prefs.defaultCustomer && customers.some(c=>c.id===prefs.defaultCustomer)) activeId = prefs.defaultCustomer;
+    applyPrefs();
+    applyRoleVisibility();
     renderAll();
   } else {
     $('loginErr').classList.add('show');
@@ -653,6 +796,7 @@ function tryLogin(){
 $('loginBtn').addEventListener('click',tryLogin);
 ['loginUser','loginPass'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter')tryLogin();}));
 $('logoutBtn').addEventListener('click',()=>{
+  currentUser=null;
   $('appView').style.display='none';
   $('loginView').style.display='flex';
   $('loginUser').value=''; $('loginPass').value=''; $('loginUser').focus();
@@ -683,18 +827,24 @@ function renderHeader(){
   $('deadlineTag').textContent='Cycle deadline: '+(c.deadline?new Date(c.deadline+'T12:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}):'not set');
   const sel=$('customerSel');
   sel.innerHTML = customers.map(x=>`<option value="${x.id}" ${x.id===activeId?'selected':''}>${esc(x.name)}</option>`).join('')
-    + `<option value="__add">＋ Add new customer…</option>`;
+    + (isAdmin() ? `<option value="__add">＋ Add new customer…</option>` : '');
 }
 
 function renderKpis(){
   const c=active(), s=calc(c), n=c.schedule.length;
   $('kpis').innerHTML=`
-    <div class="kpi accent"><div class="label">Active sites</div><div class="value">${n}</div><div class="sub">this cycle</div></div>
-    <div class="kpi"><div class="label">Serviced</div><div class="value">${s.done+s.counts.today}</div><div class="sub">${s.counts.today} in progress today</div></div>
-    <div class="kpi"><div class="label">Remaining</div><div class="value">${s.counts.upcoming}</div><div class="sub">scheduled ahead</div></div>
-    <div class="kpi"><div class="label">Needs invoice</div><div class="value">${s.counts.completed}</div><div class="sub">${fmt(s.completed)} outstanding</div></div>
-    <div class="kpi accent"><div class="label">Cycle value</div><div class="value">${fmt(s.total)}</div><div class="sub">incl. ${fmt(s.travel)} travel/revisit</div></div>
-    <div class="kpi"><div class="label">Excluded</div><div class="value">${c.excluded.length}</div><div class="sub">reassigned this cycle</div></div>`;
+    <div class="kpi accent kpi-link" data-kpi="active" role="button" tabindex="0" title="View all sites"><div class="label">Active sites</div><div class="value">${n}</div><div class="sub">this cycle</div></div>
+    <div class="kpi kpi-link" data-kpi="serviced" role="button" tabindex="0" title="View invoiced sites"><div class="label">Serviced</div><div class="value">${s.done+s.counts.today}</div><div class="sub">${s.counts.today} in progress today</div></div>
+    <div class="kpi kpi-link" data-kpi="remaining" role="button" tabindex="0" title="View upcoming sites"><div class="label">Remaining</div><div class="value">${s.counts.upcoming}</div><div class="sub">scheduled ahead</div></div>
+    <div class="kpi kpi-link" data-kpi="invoice" role="button" tabindex="0" title="View sites needing invoice"><div class="label">Needs invoice</div><div class="value">${s.counts.completed}</div><div class="sub">${fmt(s.completed)} outstanding</div></div>
+    <div class="kpi accent kpi-link" data-kpi="value" role="button" tabindex="0" title="Open revenue summary"><div class="label">Cycle value</div><div class="value">${fmt(s.total)}</div><div class="sub">incl. ${fmt(s.travel)} travel/revisit</div></div>
+    <div class="kpi kpi-link" data-kpi="excluded" role="button" tabindex="0" title="Open excluded sites"><div class="label">Excluded</div><div class="value">${c.excluded.length}</div><div class="sub">reassigned this cycle</div></div>`;
+  $('kpis').querySelectorAll('.kpi-link').forEach(el=>{
+    const fn=KPI_NAV[el.dataset.kpi];
+    if(!fn) return;
+    el.addEventListener('click',fn);
+    el.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fn(); } });
+  });
   const pct = n ? Math.round(s.done/n*100) : 0;
   $('pct').textContent = `${s.done} of ${n} complete · ${pct}%`;
   $('bar').innerHTML = n ? `
@@ -710,13 +860,18 @@ function renderWeek(){
     .sort((a,b)=>a.eta.localeCompare(b.eta));
   $('weekCount').textContent=rows.length;
   $('weekGrid').innerHTML = rows.length ? rows.map(r=>`
-    <div class="week-card">
+    <div class="week-card" data-job="${r.id}" role="button" tabindex="0" title="Open job detail">
       <div class="d">${dShort(r.eta)}${r.eta===CONFIG.today?' · TODAY':''}</div>
       <div class="s">Site #${esc(r.site)}</div>
       <div class="c">${esc(r.addr)} — ${esc(r.city)}${r.closes?` · closes ${esc(r.closes)}`:''}</div>
       <div class="fee">${fmt(r.base)}${r.travel?` <span class="travel">+ ${fmt(r.travel)} travel</span>`:''}</div>
     </div>`).join('')
     : `<p class="rev-note">Nothing scheduled ahead. Add a site or import a schedule to get started.</p>`;
+  $('weekGrid').querySelectorAll('[data-job]').forEach(el=>{
+    const open=()=>openJobModal(el.dataset.job);
+    el.addEventListener('click',open);
+    el.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } });
+  });
 }
 
 function cityOptions(){
@@ -1122,6 +1277,125 @@ $('exPdf').addEventListener('click',()=>{
 
 $('exPrint').addEventListener('click',()=>window.print());
 window.addEventListener('beforeprint',()=>document.querySelectorAll('details').forEach(d=>d.open=true));
+
+/* =====================================================
+   ROLES · PREFERENCES · NAVIGATION  (feature additions)
+   ===================================================== */
+function applyPrefs(){
+  const a = ACCENTS[prefs.accent] || ACCENTS.blue;
+  const r = document.documentElement.style;
+  r.setProperty('--accent', a.accent);
+  r.setProperty('--accent-deep', a.deep);
+  r.setProperty('--accent-soft', a.soft);
+  document.body.classList.toggle('compact', prefs.density==='compact');
+}
+function applyRoleVisibility(){
+  const admin = isAdmin();
+  const ec = $('editCustomerBtn'); if(ec) ec.style.display = admin ? 'inline-flex' : 'none';
+  document.querySelectorAll('.admin-only').forEach(el=>{ el.style.display = admin ? '' : 'none'; });
+}
+
+/* ---- KPI tiles → open + filter + scroll to the matching section ---- */
+function gotoSection(sel, opts={}){
+  const d = document.querySelector(sel);
+  if(!d) return;
+  d.open = true;
+  if(opts.clear){ $('fStatus').value=''; $('fCity').value=''; $('fFee').value=''; $('fSearch').value=''; }
+  if(opts.status!==undefined){ $('fStatus').value = opts.status; }
+  if(opts.clear || opts.status!==undefined) renderTable();
+  d.scrollIntoView({behavior:'smooth', block:'start'});
+}
+const KPI_NAV = {
+  active:    ()=>gotoSection('#secSchedule',{clear:true}),
+  serviced:  ()=>gotoSection('#secSchedule',{status:'invoiced'}),
+  remaining: ()=>gotoSection('#secSchedule',{status:'upcoming'}),
+  invoice:   ()=>gotoSection('#secSchedule',{status:'completed'}),
+  value:     ()=>gotoSection('#secRevenue'),
+  excluded:  ()=>gotoSection('#secExcluded'),
+};
+
+/* ---- Next Up card → job detail ---- */
+let jobJobId = null;
+function openJobModal(id){
+  const c = active(), r = c.schedule.find(x=>x.id===id);
+  if(!r) return;
+  jobJobId = id;
+  $('jobModalTitle').textContent = `Site #${r.site}`;
+  $('jobModalSub').textContent = `${c.name}${c.subtitle? ' · '+c.subtitle : ''}`;
+  const addr = `${r.addr||''}${r.city? (r.addr?', ':'')+r.city : ''} ${r.zip||''}`.trim() || '—';
+  const etaTxt = r.eta ? new Date(r.eta+'T12:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'}) : '—';
+  const rows = [
+    ['Status', `<span class="status-sel s-${r.status}" style="cursor:default;padding-right:11px;background-image:none">${esc(STATUS_META[r.status].label)}</span>`],
+    ['Service ETA', esc(etaTxt)],
+    ['Closes', esc(r.closes||'—')],
+    ['Address', esc(addr)],
+    ['WO #', esc(r.wo||'—')],
+    ['Ticket #', esc(r.tk||'—')],
+    ['Base rate', esc(fmt(r.base))],
+    ['Travel / revisit', r.travel ? esc(fmt(r.travel)) : '—'],
+    ['Total', esc(fmt((+r.base||0)+(+r.travel||0)))],
+    ['Flag / note', esc(r.note||'—')],
+  ];
+  $('jobBody').innerHTML = `<div class="job-grid">`+rows.map(([k,v])=>`<div class="job-k">${esc(k)}</div><div class="job-v">${v}</div>`).join('')+`</div>`;
+  openOverlay('jobOverlay');
+}
+$('jobEditBtn').addEventListener('click',()=>{ closeOverlay('jobOverlay'); if(jobJobId) openSiteModal(jobJobId); });
+
+/* ---- Profile & settings (display name, appearance, default customer, users) ---- */
+$('profileBtn').addEventListener('click',openProfile);
+function openProfile(){
+  if(!currentUser) return;
+  $('profileWho').textContent = `Signed in as @${currentUser.username}`;
+  $('pName').value = currentUser.displayName || '';
+  $('pRoleView').value = currentUser.role==='admin' ? 'Administrator' : 'Member';
+  $('pAccent').innerHTML = Object.keys(ACCENTS).map(k=>`<button type="button" class="swatch ${k===prefs.accent?'sel':''}" data-accent="${k}" style="background:${ACCENTS[k].accent}" title="${k}" aria-label="${k} accent"></button>`).join('');
+  $('pAccent').querySelectorAll('.swatch').forEach(b=>b.addEventListener('click',()=>{
+    $('pAccent').querySelectorAll('.swatch').forEach(x=>x.classList.remove('sel')); b.classList.add('sel');
+  }));
+  document.querySelectorAll('input[name="pDensity"]').forEach(rb=>{ rb.checked = rb.value===prefs.density; });
+  $('pDefaultCust').innerHTML = `<option value="">Last used</option>`+customers.map(c=>`<option value="${c.id}" ${c.id===prefs.defaultCustomer?'selected':''}>${esc(c.name)}</option>`).join('');
+  renderUserList();
+  applyRoleVisibility();
+  openOverlay('profileOverlay');
+}
+function renderUserList(){
+  $('userCount').textContent = users.length;
+  $('userList').innerHTML = users.map((u,i)=>`
+    <div class="user-row">
+      <span class="u-name">${esc(u.displayName||u.username)}</span>
+      <span class="role-pill role-${u.role}">${esc(u.role)}</span>
+      <span class="u-meta">@${esc(u.username)}</span>
+      <span class="spacer"></span>
+      ${u.username===currentUser.username ? `<span class="u-meta">you</span>` : `<button class="xremove" data-urm="${i}" title="Remove user" aria-label="Remove ${esc(u.username)}">×</button>`}
+    </div>`).join('');
+  $('userList').querySelectorAll('[data-urm]').forEach(b=>b.addEventListener('click',()=>{
+    const i=+b.dataset.urm, u=users[i];
+    if(u.role==='admin' && users.filter(x=>x.role==='admin').length<=1){ toast('Keep at least one admin account.'); return; }
+    users.splice(i,1); saveStore(); renderUserList(); toast(`Removed @${u.username}.`);
+  }));
+}
+$('uAddBtn').addEventListener('click',()=>{
+  const displayName=$('uName').value.trim(), username=$('uUser').value.trim().toLowerCase(), password=$('uPass').value, role=$('uRole').value;
+  if(!username||!password){ toast('Username and password are required.'); return; }
+  if(users.some(u=>u.username.toLowerCase()===username)){ toast('That username already exists.'); return; }
+  users.push({username, password, displayName:displayName||username, role});
+  $('uName').value=''; $('uUser').value=''; $('uPass').value=''; $('uRole').value='member';
+  saveStore(); renderUserList(); toast(`User @${username} added.`);
+});
+$('pSaveBtn').addEventListener('click',()=>{
+  const dn = $('pName').value.trim() || currentUser.username;
+  currentUser.displayName = dn;
+  const me = users.find(u=>u.username===currentUser.username); if(me) me.displayName = dn;
+  const sw = $('pAccent').querySelector('.swatch.sel'); if(sw) prefs.accent = sw.dataset.accent;
+  const dens = document.querySelector('input[name="pDensity"]:checked'); if(dens) prefs.density = dens.value;
+  prefs.defaultCustomer = $('pDefaultCust').value;
+  applyPrefs(); saveStore(); renderHeader();
+  closeOverlay('profileOverlay'); toast('Settings saved.');
+});
+
+/* ---- init: load saved users/prefs and apply theme before login ---- */
+loadStore();
+applyPrefs();
 </script>
 </body>
 </html>
