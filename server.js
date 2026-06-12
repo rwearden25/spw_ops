@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,16 +33,19 @@ const AGENT = {
   clientId:     process.env.GRAPH_CLIENT_ID,
   clientSecret: process.env.GRAPH_CLIENT_SECRET,
   mailbox:      process.env.GRAPH_MAILBOX,
-  from:    (process.env.ACH_FROM || '').toLowerCase(),
-  subject: (process.env.ACH_SUBJECT || 'Remit Advice'),
+  // ACH_FROM is a comma-separated allowlist of EXACT sender addresses (normalized, lowercased)
+  fromList: (process.env.ACH_FROM || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean),
+  subject:  (process.env.ACH_SUBJECT || 'Remit Advice'),
   intervalMs: Math.max(60000, parseInt(process.env.POLL_INTERVAL_MS || '300000', 10) || 300000),
+  requireAuthResults: process.env.ACH_REQUIRE_AUTH_RESULTS !== 'false', // require DMARC=pass on the email (default on)
+  maxAttachB64: 4 * 1024 * 1024,                                        // cap attachment (~3 MB) before decoding
 };
 const agentEnabled = !!(AGENT.tenant && AGENT.clientId && AGENT.clientSecret && AGENT.mailbox);
 
 const DATA_FILE = path.join(__dirname, 'data', 'payments.json');
 let payments = [];                 // {id, ref, payer, amount, currency, dateISO, receivedAt, source, messageId, subject}
 const seenMessages = new Set();
-let lastPoll = null, lastError = null;
+let lastPoll = null, lastErrorKind = null;   // coarse category only ('auth'|'network'|'parse'|'error'); verbose stays in logs
 
 function loadPayments() {
   try {
@@ -111,52 +115,88 @@ async function graph(pathOrUrl) {
   if (!r.ok) throw new Error('graph ' + r.status + ' ' + await r.text());
   return r.json();
 }
+function dedupeKey(p, messageId) {
+  // stable key: prefer the payment reference, else hash identifying fields (never fail open)
+  return p.ref || crypto.createHash('sha256').update(`${String(p.payer || '').toLowerCase()}|${p.amount}|${p.dateISO}|${messageId || ''}`).digest('hex');
+}
+async function senderAuthenticated(mb, id) {
+  // anti-spoofing: require DMARC=pass (and SPF or DKIM pass) from Authentication-Results. Fail closed.
+  if (!AGENT.requireAuthResults) return true;
+  try {
+    const m = await graph(`/users/${mb}/messages/${id}?$select=internetMessageHeaders`);
+    const blob = (m.internetMessageHeaders || [])
+      .filter(h => /^authentication-results$/i.test(h.name || ''))
+      .map(h => String(h.value || '').toLowerCase()).join(' ; ');
+    return /dmarc=pass/.test(blob) && /(dkim=pass|spf=pass)/.test(blob);
+  } catch (e) { return false; }
+}
 async function pollMailbox() {
   if (!agentEnabled) return;
   try {
     const mb = encodeURIComponent(AGENT.mailbox);
     const q = `/users/${mb}/mailFolders/inbox/messages?$top=25&$orderby=receivedDateTime desc&$select=id,subject,from,receivedDateTime,hasAttachments`;
     const data = await graph(q);
-    let added = 0;
+    let dirty = false;
     for (const msg of (data.value || [])) {
       if (seenMessages.has(msg.id) || !msg.hasAttachments) continue;
       const subj = msg.subject || '';
-      const fromAddr = ((msg.from && msg.from.emailAddress && msg.from.emailAddress.address) || '').toLowerCase();
+      const fromAddr = ((msg.from && msg.from.emailAddress && msg.from.emailAddress.address) || '').toLowerCase().trim();
+      // trust boundary: EXACT sender allowlist, then subject match, then verified email auth
+      if (AGENT.fromList.length && !AGENT.fromList.includes(fromAddr)) continue;
       if (AGENT.subject && !subj.toLowerCase().includes(AGENT.subject.toLowerCase())) continue;
-      if (AGENT.from && !fromAddr.includes(AGENT.from)) continue;
+      seenMessages.add(msg.id);                       // mark processed so we don't re-fetch
+      if (!(await senderAuthenticated(mb, msg.id))) { console.warn('[agent] rejected (email auth failed) from', fromAddr); continue; }
       const att = await graph(`/users/${mb}/messages/${msg.id}/attachments`);
-      const file = (att.value || []).find(a => /\.csv$/i.test(a.name || '') || /csv/i.test(a.contentType || ''));
-      seenMessages.add(msg.id);                       // mark processed regardless, so we don't re-fetch
+      const file = (att.value || []).find(a => /\.csv$/i.test(a.name || '') && /csv/i.test(a.contentType || 'text/csv'));
       if (!file || !file.contentBytes) continue;
+      if (String(file.contentBytes).length > AGENT.maxAttachB64) { console.warn('[agent] attachment too large — skipped'); continue; }
       const p = parseRemittance(csvToRows(Buffer.from(file.contentBytes, 'base64').toString('utf8')));
-      if (!p || !p.payer) continue;
-      if (p.ref && payments.some(x => x.ref === p.ref)) continue;
+      if (!p || !p.payer) continue;                   // reject CSVs with no payer
+      const key = dedupeKey(p, msg.id);
+      if (payments.some(x => dedupeKey(x, x.messageId) === key)) continue;
       payments.unshift({
         id: 'pay' + Date.now() + Math.floor(Math.random() * 1000),
         ref: p.ref, payer: p.payer, amount: p.amount, currency: p.currency, dateISO: p.dateISO,
         receivedAt: (msg.receivedDateTime || '').slice(0, 10) || p.dateISO,
         source: 'outlook', messageId: msg.id, subject: subj,
       });
-      added++;
+      if (payments.length > 5000) payments.length = 5000;   // bounded retention
+      dirty = true;
       console.log(`[agent] recorded ACH ${p.ref || '(no ref)'} — ${p.payer} ${p.amount}`);
     }
-    if (added) savePayments();
-    lastPoll = new Date().toISOString(); lastError = null;
+    if (dirty) savePayments();
+    lastPoll = new Date().toISOString(); lastErrorKind = null;
   } catch (e) {
-    lastError = e.message; console.error('[agent] poll failed:', e.message);
+    lastErrorKind = /token|40[13]|unauthor/i.test(e.message) ? 'auth' : /graph|fetch|network|ENOTFOUND|ETIMEDOUT/i.test(e.message) ? 'network' : 'error';
+    console.error('[agent] poll failed:', e.message);
   }
 }
 
-/* ---- API (mounted before the SPA fallback) ----
-   NOTE: /api/payments is currently unauthenticated. Before production with
-   real financial data, put this behind real auth (see the security notice
-   in the README) — the same caveat as the client-side login gate. */
+/* ---- API auth (mounted before the SPA fallback) ----
+   There are no server-side user sessions yet (the app login is a client-side
+   gate), so payment data is protected with a shared secret. SECURE BY DEFAULT:
+   /api/payments is denied unless API_TOKEN is set AND the caller presents it as
+   `Authorization: Bearer <token>` (or `x-api-key`). Unauthenticated callers of
+   /api/status learn only whether the agent is on — never the mailbox or errors.
+   Per-user auth (and dropping the shared secret) comes with the Postgres/auth
+   phase; the browser's syncFromAgent() sends the token when one is configured. */
+const API_TOKEN = process.env.API_TOKEN || '';
+function bearer(req){ const a = req.get('authorization') || ''; return a.startsWith('Bearer ') ? a.slice(7) : (req.get('x-api-key') || ''); }
+function safeEq(a, b){ const A = Buffer.from(String(a)), B = Buffer.from(String(b)); return A.length === B.length && crypto.timingSafeEqual(A, B); }
+function authed(req){ return !!API_TOKEN && safeEq(bearer(req), API_TOKEN); }
+function requireApiAuth(req, res, next){
+  if(!API_TOKEN) return res.status(403).json({ error: 'payments API disabled — set API_TOKEN to expose it' });
+  if(authed(req)) return next();
+  return res.status(401).json({ error: 'unauthorized' });
+}
+
 app.use(express.json());
-app.get('/api/status', (_req, res) => res.json({
-  agentEnabled, mailbox: agentEnabled ? AGENT.mailbox : null,
-  intervalMs: AGENT.intervalMs, lastPoll, lastError, count: payments.length,
-}));
-app.get('/api/payments', (_req, res) => res.json(payments));
+app.get('/api/status', (req, res) => {
+  const out = { agentEnabled };                       // non-sensitive; safe for anyone
+  if(authed(req)) Object.assign(out, { mailbox: AGENT.mailbox, intervalMs: AGENT.intervalMs, lastPoll, lastErrorKind, count: payments.length });
+  res.json(out);
+});
+app.get('/api/payments', requireApiAuth, (_req, res) => res.json(payments));
 
 app.use(express.static(__dirname, { extensions: ['html'] }));
 app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
@@ -165,6 +205,9 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`SPW-OPS running on port ${PORT}`);
   if (agentEnabled) {
     console.log(`[agent] Outlook ACH monitor ON — mailbox ${AGENT.mailbox}, every ${Math.round(AGENT.intervalMs / 1000)}s`);
+    if (!AGENT.fromList.length) console.warn('[agent] WARNING: ACH_FROM unset — no sender allowlist. Set it to the exact remittance sender(s) to avoid processing spoofed/unintended mail.');
+    if (!AGENT.requireAuthResults) console.warn('[agent] WARNING: ACH_REQUIRE_AUTH_RESULTS=false — DMARC verification disabled.');
+    if (!API_TOKEN) console.warn('[agent] WARNING: API_TOKEN unset — /api/payments is locked (403). Set API_TOKEN to expose payment data to authorized callers.');
     pollMailbox();
     setInterval(pollMailbox, AGENT.intervalMs);
   } else {

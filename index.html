@@ -1458,13 +1458,17 @@ function payDate(v){
   return toISO(v);
 }
 function matchCustomer(payer){
+  // Exact, normalized match against the customer name or an explicit payerAliases
+  // allowlist — no loose substring matching (avoids misattributing a payment).
+  // Ambiguous (>1) or no match → null, i.e. left Unmatched for manual assignment.
   const p = String(payer||'').toLowerCase().trim();
-  if(!p) return null;
-  const hit = customers.find(c=>{
-    const n = c.name.toLowerCase();
-    return p.includes(n) || n.includes(p) || (c.payerAliases||[]).some(a=>p.includes(String(a).toLowerCase()));
+  if(p.length < 3) return null;
+  const matches = customers.filter(c=>{
+    const n = String(c.name||'').toLowerCase().trim();
+    const aliases = (c.payerAliases||[]).map(a=>String(a).toLowerCase().trim());
+    return n===p || aliases.includes(p);
   });
-  return hit ? hit.id : null;
+  return matches.length===1 ? matches[0].id : null;
 }
 function parseRemittance(rows){
   // rows = array-of-arrays; find the 'Payer' header row, read the row beneath it
@@ -1531,7 +1535,19 @@ function renderPayments(){
   }).join('');
   $('payBody').querySelectorAll('[data-passign]').forEach(sel=>sel.addEventListener('change',e=>{
     const p = payments.find(x=>x.id===e.target.dataset.passign);
-    if(p){ p.customerId = e.target.value||null; saveStore(); renderPayments(); if(p.customerId) toast('Payment assigned to customer.'); }
+    if(!p) return;
+    p.customerId = e.target.value||null;
+    if(p.customerId){
+      // remember this payer as an explicit alias so future identical payers auto-match
+      const c = customers.find(x=>x.id===p.customerId);
+      if(c && p.payer){
+        c.payerAliases = c.payerAliases||[];
+        const a = String(p.payer).toLowerCase().trim();
+        if(!c.payerAliases.some(x=>String(x).toLowerCase().trim()===a)) c.payerAliases.push(p.payer);
+      }
+      toast('Payment assigned — future payments from this payer will auto-match.');
+    }
+    saveStore(); renderPayments();
   }));
 }
 $('payImportBtn').addEventListener('click',()=>$('payFile').click());
@@ -1562,9 +1578,13 @@ $('payTestBtn').addEventListener('click',()=>{
    backend (e.g. opened as a static file). */
 async function syncFromAgent(){
   try{
-    const st = await fetch('/api/status').then(r=>r.ok?r.json():null);
+    // /api/payments is token-gated (financial data). Send the operator-configured
+    // token if present; without one the server denies it and we simply no-op.
+    const tok = (prefs && prefs.apiToken) || '';
+    const headers = tok ? { Authorization: 'Bearer ' + tok } : {};
+    const st = await fetch('/api/status', {headers}).then(r=>r.ok?r.json():null);
     if(!st || !st.agentEnabled) return;
-    const list = await fetch('/api/payments').then(r=>r.ok?r.json():[]);
+    const list = await fetch('/api/payments', {headers}).then(r=>r.ok?r.json():[]);
     (list||[]).forEach(p=>recordPayment(
       {payer:p.payer, amount:p.amount, currency:p.currency, ref:p.ref, dateISO:p.dateISO},
       p.source||'outlook', p.receivedAt, {silentDup:true}

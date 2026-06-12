@@ -29,13 +29,17 @@ To enable the agent, register an app in your Microsoft 365 tenant (Entra ID → 
 | `GRAPH_CLIENT_ID` | yes | Application (client) ID |
 | `GRAPH_CLIENT_SECRET` | yes | client secret value |
 | `GRAPH_MAILBOX` | yes | mailbox to watch (e.g. `ops@…`) |
-| `ACH_FROM` | no | sender filter (e.g. `vendor.hotline@brinker.com`) |
-| `ACH_SUBJECT` | no | subject substring (default `Remit Advice`) |
+| `API_TOKEN` | to expose data | shared secret required to read `/api/payments`; without it the API is denied (403) |
+| `ACH_FROM` | strongly recommended | **exact** sender allowlist, comma-separated (e.g. `vendor.hotline@brinker.com`) |
+| `ACH_SUBJECT` | no | subject substring to match (default `Remit Advice`) |
+| `ACH_REQUIRE_AUTH_RESULTS` | no | set `false` to skip DMARC verification (default on — recommended) |
 | `POLL_INTERVAL_MS` | no | poll cadence (default `300000`, min `60000`) |
 
-Without these, the agent stays off and the app runs as a plain static server. Health/data: `GET /api/status`, `GET /api/payments`.
+Without the `GRAPH_*` vars the agent stays off and the app runs as a plain static server.
 
-> **Note:** server-side payments currently persist to `data/payments.json`, which is **ephemeral on Railway**, and `/api/payments` is unauthenticated. A Postgres datastore + real auth are the planned durable/secure replacement before handling live financial data.
+**Security posture:** the agent only ingests mail that matches the exact `ACH_FROM` allowlist *and* passes DMARC (anti-spoofing); attachments are constrained to `.csv` and size-capped. `/api/payments` is **denied unless `API_TOKEN` is set** and the caller presents it (`Authorization: Bearer <token>`); `/api/status` reveals only whether the agent is on. Payer→customer matching is exact-allowlist only (no fuzzy substring) to avoid misattribution.
+
+> **Still required before live financial data:** real per-user auth (the login is a client-side gate, so the API leans on a shared secret), and a **Postgres** datastore — server-side payments currently persist to `data/payments.json`, which is **ephemeral on Railway**.
 
 ## Run locally
 
