@@ -1059,6 +1059,7 @@ $('customerSel').addEventListener('change',e=>{
 $('editCustomerBtn').addEventListener('click',()=>openCustomerModal('edit'));
 
 function openCustomerModal(mode){
+  if(!isAdmin()){ toast('Only admins can add or edit customers.'); return; }
   custMode=mode;
   const c=active();
   $('custModalTitle').textContent = mode==='add' ? 'Add customer' : 'Edit customer';
@@ -1071,6 +1072,7 @@ function openCustomerModal(mode){
   $('cName').focus();
 }
 $('cSaveBtn').addEventListener('click',()=>{
+  if(!isAdmin()){ toast('Only admins can manage customers.'); return; }
   const name=$('cName').value.trim();
   if(!name){ toast('Give the customer a name first.'); return; }
   if(custMode==='add'){
@@ -1087,6 +1089,7 @@ $('cSaveBtn').addEventListener('click',()=>{
   closeOverlay('customerOverlay'); renderAll();
 });
 $('cDeleteBtn').addEventListener('click',()=>{
+  if(!isAdmin()){ toast('Only admins can delete customers.'); return; }
   const c=active();
   if(!confirm(`Delete ${c.name} and all of its sites? This can't be undone in this session.`)) return;
   customers=customers.filter(x=>x.id!==c.id);
